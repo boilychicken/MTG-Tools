@@ -1210,23 +1210,35 @@ function renderStats(){
  const arr=Object.entries(so).sort((a,b)=>b[1]-a[1]),top10=arr.slice(0,10),rest=arr.slice(10).reduce((a,x)=>a+x[1],0),mx=Math.max(1,...top10.map(x=>x[1])),fmt=v=>st.by=='value'?gb(v):Math.round(v).toLocaleString('en-GB');
  $('#stsets').innerHTML=top10.map(([k,v])=>`<div class="hb"><span>${esc(k)}</span><div class="pb"><i style="width:${v/mx*100}%"></i></div><b>${fmt(v)}</b></div>`).join('')+(rest?`<p class="m">Plus ${arr.length-10} other sets: ${fmt(rest)}.</p>`:'');
  renderSets()}
+let compTok=0;const setMem=new Map(),setOwn=new Map();
 async function renderSets(){
- const el=$('#stcomp');el.innerHTML='<p class="m">Loading set information…</p>';
+ const el=$('#stcomp'),tok=++compTok;el.innerHTML='<p class="m">Loading set information…</p>';
  const info=await loadSetInfo();if(!info){el.innerHTML="<p class='m'>Couldn't load set sizes from Scryfall. Check your connection and reopen this page.</p>";return}
- const o=new Map();statRows().forEach(r=>r.sets.forEach(s=>o.set(s,(o.get(s)||0)+1)));
- let L=[],unk=[];o.forEach((n,name)=>{const i=info[name.toLowerCase()];if(!i||i.dig||!i.n){unk.push(name);return}L.push({name,code:i.code,own:n,size:Math.max(i.n,n),date:i.date})});
- L.forEach(x=>x.pct=x.own/x.size);const hid=st.min?L.filter(x=>x.own<5).length:0;if(st.min)L=L.filter(x=>x.own>=5);
+ const o=new Map();statRows().forEach(r=>r.sets.forEach(s=>{if(!o.has(s))o.set(s,new Set());o.get(s).add(r.c.n)}));
+ let L=[],unk=[];o.forEach((names,name)=>{const i=info[name.toLowerCase()];if(!i||i.dig){unk.push(name);return}L.push({name,code:i.code,date:i.date,names,est:i.n||0})});
+ const hid=st.min?L.filter(x=>x.names.size<5).length:0;if(st.min)L=L.filter(x=>x.names.size>=5);
+ let failed=0;
+ for(let i=0;i<L.length;i++){const x=L[i];
+  if(!setMem.has(x.code)){el.innerHTML=`<p class="m">Counting the cards in each set so the totals are exact: ${i+1} of ${L.length}. This is saved, so it's only slow the first time.</p>`;
+   try{setMem.set(x.code,await getSetCards(x.code))}catch(e){setMem.set(x.code,[])}if(tok!=compTok)return}
+  const list=setMem.get(x.code);
+  if(list.length){const nm=new Set(list.map(c=>c.n));x.own=[...x.names].filter(n=>nm.has(n)).length;x.size=list.length;x.exact=true}
+  else{x.own=x.names.size;x.size=Math.max(x.est,x.own);x.exact=false;failed++}
+  setOwn.set(x.code,x.names)}
+ if(tok!=compTok)return;
+ L.forEach(x=>x.pct=x.own/Math.max(1,x.size));
  L.sort(st.sort=='pct'?(a,b)=>b.pct-a.pct||b.own-a.own:st.sort=='own'?(a,b)=>b.own-a.own:(a,b)=>b.date.localeCompare(a.date));
  const shown=st.all?L:L.slice(0,25);
  el.innerHTML=`<div class="chips">${[['pct','Most complete'],['own','Most owned'],['new','Newest']].map(([k,l])=>`<button class="chip wide" data-ssort="${k}" aria-pressed="${st.sort==k}">${l}</button>`).join('')}<label class="m"><input type="checkbox" id="stmin" ${st.min?'checked':''}> Hide sets where I own fewer than 5 cards${hid?` (${hid} hidden)`:''}</label></div>`
-  +(shown.length?shown.map(x=>`<div class="sc"><div class="hb"><span>${esc(x.name)} <span class="m">${x.code}</span></span><div class="pb" role="progressbar" aria-valuenow="${Math.round(x.pct*100)}" aria-valuemin="0" aria-valuemax="100" aria-label="${esc(x.name)} completion"><i style="width:${x.pct*100}%"></i></div><b>${x.own} / ${x.size} <span class="m">${Math.round(x.pct*100)}%</span></b></div><button class="alt" data-smiss="${x.code}">${setOpen.has(x.code)?'Hide missing cards':"See what's missing"}</button><div id="sm-${x.code}" class="smiss">${setOpen.get(x.code)||''}</div></div>`).join(''):'<p class="m">No sets to show yet.</p>')
+  +(shown.length?shown.map(x=>`<div class="sc"><div class="hb"><span>${esc(x.name)} <span class="m">${x.code}</span></span><div class="pb" role="progressbar" aria-valuenow="${Math.round(x.pct*100)}" aria-valuemin="0" aria-valuemax="100" aria-label="${esc(x.name)} completion"><i style="width:${x.pct*100}%"></i></div><b>${x.exact?'':'~'}${x.own} / ${x.size} <span class="m">${Math.round(x.pct*100)}%</span></b></div><button class="alt" data-smiss="${x.code}">${setOpen.has(x.code)?'Hide missing cards':"See what's missing"}</button><div id="sm-${x.code}" class="smiss">${setOpen.get(x.code)||''}</div></div>`).join(''):'<p class="m">No sets to show yet.</p>')
   +(L.length>25?`<div class="tools"><button class="alt" data-sall>${st.all?'Show fewer':'Show all '+L.length+' sets'}</button></div>`:'')
-  +`<p class="m">Counts are unique card names you own from each set, out of the number of cards printed in the set. Bonus cards, promos and alternate art can make the totals slightly different from a full collector's count.${unk.length?` ${unk.length} set name${unk.length==1?'':'s'} from your file couldn't be matched (promos, tokens or special products).`:''}</p>`}
+  +`<p class="m">Each set is counted from its full card list on Scryfall (basic lands excluded), and only cards you own in that set's own printing count. A card you own as a reprint from another set doesn't count here.${failed?` A "~" means the full list couldn't be loaded, so that total is an estimate.`:''}${unk.length?` ${unk.length} set name${unk.length==1?'':'s'} from your file couldn't be matched (promos, tokens or special products).`:''}</p>`}
 async function showMissing(code){
  const box=$('#sm-'+code);if(!box)return;if(setOpen.has(code)){setOpen.delete(code);renderSets();return}
  box.innerHTML='<span class="m">Loading cards…</span>';
- try{const cs=await getSetCards(code);if(!cs.length)throw 0;const miss=cs.filter(c=>!ownSet.has(c.n)).sort((a,b)=>(+b.p||0)-(+a.p||0)),cost=miss.reduce((a,c)=>a+(+c.p||0)*fxNow,0);
-  setOpen.set(code,miss.length?`<p class="m">${miss.length} of ${cs.length} cards missing, about <b>${gb(cost)}</b> to buy them all at Cardmarket averages. Most expensive first.</p>`+miss.slice(0,40).map(c=>`<div class="row" data-n="${enc(c.n)}"><span class="miss">${esc(c.n)}<br><span class="m">${esc(c.r)}</span></span><span class="c"><span class="miss">${c.p?gb(+c.p*fxNow):'no price'}</span><button class="info" data-info="${enc(c.n)}" aria-label="Show details for ${esc(c.n)}">i</button></span></div>`).join('')+(miss.length>40?`<p class="m">…and ${miss.length-40} more.</p>`:''):'<p class="good">You own every card in this set.</p>');
+ try{const cs=setMem.get(code)||await getSetCards(code);if(!cs.length)throw 0;const have=setOwn.get(code)||new Set(),
+   miss=cs.filter(c=>!have.has(c.n)).sort((a,b)=>(+b.p||0)-(+a.p||0)),other=miss.filter(c=>ownSet.has(c.n)),buy=miss.filter(c=>!ownSet.has(c.n)),cost=buy.reduce((a,c)=>a+(+c.p||0)*fxNow,0);
+  setOpen.set(code,miss.length?`<p class="m">${miss.length} of ${cs.length} cards aren't in your collection from this set${other.length?` (${other.length} of them you own as a reprint from another set)`:''}. Buying the other ${buy.length} would cost about <b>${gb(cost)}</b> at Cardmarket averages. Most expensive first.</p>`+miss.slice(0,40).map(c=>{const o=ownSet.has(c.n);return`<div class="row" data-n="${enc(c.n)}"><span class="${o?'part':'miss'}">${esc(c.n)}<br><span class="m">${esc(c.r)}</span></span><span class="c">${o?'<span class="part">own another printing</span>':`<span class="miss">${c.p?gb(+c.p*fxNow):'no price'}</span>`}<button class="info" data-info="${enc(c.n)}" aria-label="Show details for ${esc(c.n)}">i</button></span></div>`}).join('')+(miss.length>40?`<p class="m">…and ${miss.length-40} more.</p>`:''):'<p class="good">You own every card in this set.</p>');
   renderSets()}catch(e){box.innerHTML='<span class="m">Could not load that set. Check your connection.</span>'}}
 $('#tool-stats').addEventListener('click',e=>{const d=e.target.dataset||{};
  if(d.by){st.by=d.by;renderStats()}else if(d.ssort){st.sort=d.ssort;renderSets()}else if(d.sall!==undefined){st.all=!st.all;renderSets()}else if(d.smiss)showMissing(d.smiss)
