@@ -92,6 +92,9 @@ dialog{background:var(--panel);color:var(--tx);border:1px solid var(--line);bord
 .gc{position:relative;border-radius:10px;overflow:hidden;background:#0f1815;aspect-ratio:488/680;border:1px solid var(--line)}.gc:hover,.gc:focus-visible{border-color:var(--gold)}
 .gc img{width:100%;height:100%;display:block;object-fit:cover}.gnm{display:block;padding:10px;font-size:13px}
 .gq{position:absolute;right:6px;bottom:6px;background:#000c;color:#fff;font-size:12px;font-weight:600;border-radius:10px;padding:1px 8px}
+.dnbig .dn{display:grid;grid-template-columns:minmax(240px,420px) minmax(0,1fr);gap:4px 32px;align-items:center}.dnbig .dn h4{grid-column:1/-1;font-size:18px}.dnbig svg{width:100%;height:auto;max-width:420px}.dnbig .lg{font-size:15px}.dnbig .lg li{padding:4px 0}
+@media(max-width:700px){.dnbig .dn{grid-template-columns:1fr}}
+#pcsel{background:#0f1815;color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:6px;margin-left:6px}
 [hidden]{display:none!important}
 </style></head><body>
 <header><h1>MTG Deck Tools</h1>
@@ -271,7 +274,7 @@ function importText(t){
  const ni=h.findIndex(x=>['name','card name','card'].includes(x));
  if(ni>=0){
   const qi=h.findIndex(x=>['count','quantity','qty','amount'].includes(x)),ii=h.findIndex(x=>x=='scryfall id'||x=='scryfall_id'),si0=h.findIndex(x=>['set name','edition name'].includes(x)),si=si0>=0?si0:h.findIndex(x=>['set code','edition','set'].includes(x)),ri=h.findIndex(x=>x=='rarity'),fi=h.findIndex(x=>x=='foil');
-  rows.slice(1).forEach(r=>{const n=(r[ni]||'').trim();if(n){m.set(n,(m.get(n)||0)+(qi>=0?parseInt(r[qi])||1:1));if(ii>=0&&/^[0-9a-f-]{36}$/i.test((r[ii]||'').trim())&&!ids.has(n))ids.set(n,r[ii].trim());addMeta(n,r[si],r[ri]);if(fi>=0&&/foil|etched/i.test(r[fi]||'')&&!/^(normal|false|no)$/i.test((r[fi]||'').trim()))foilQ.set(n,(foilQ.get(n)||0)+(qi>=0?parseInt(r[qi])||1:1))}});
+  rows.slice(1).forEach(r=>{const n=(r[ni]||'').trim();if(n){m.set(n,(m.get(n)||0)+(qi>=0?parseInt(r[qi])||1:1));if(ii>=0&&/^[0-9a-f-]{36}$/i.test((r[ii]||'').trim())&&!ids.has(n))ids.set(n,r[ii].trim());addMeta(n,r[si],r[ri],ii>=0&&/^[0-9a-f-]{36}$/i.test((r[ii]||'').trim())?r[ii].trim().toLowerCase():'');if(fi>=0&&/foil|etched/i.test(r[fi]||'')&&!/^(normal|false|no)$/i.test((r[fi]||'').trim()))foilQ.set(n,(foilQ.get(n)||0)+(qi>=0?parseInt(r[qi])||1:1))}});
  }else t.split(/\r?\n/).forEach(l=>{
   const x=l.trim().match(/^(?:(\d+)x?\s+)?(.+?)(\s+\(\w+\).*)?$/);
   if(x&&x[2]&&!x[2].startsWith('//'))m.set(x[2].trim(),(m.get(x[2].trim())||0)+(+x[1]||1));
@@ -312,7 +315,7 @@ async function load(){
   save()}
  const seen=new Set();lib=[];const miss=[];
  names.forEach(n=>{const c=cards[n.toLowerCase()];if(c===undefined)return;if(!c){miss.push(n);return}if(!seen.has(c.n)){seen.add(c.n);lib.push(c)}});
- ownSet=new Set(lib.map(c=>c.n));qty=new Map();foilN=new Map();meta=new Map();names.forEach(n=>{const c=cards[n.toLowerCase()];if(!c)return;qty.set(c.n,(qty.get(c.n)||0)+m.get(n));if(foilQ.get(n))foilN.set(c.n,(foilN.get(c.n)||0)+foilQ.get(n));const raw=metaRaw.get(n),o=meta.get(c.n)||{sets:new Set(),rars:new Set()};if(raw){raw.sets.forEach(x=>o.sets.add(x));raw.rars.forEach(x=>o.rars.add(x))}meta.set(c.n,o)});
+ ownSet=new Set(lib.map(c=>c.n));qty=new Map();foilN=new Map();meta=new Map();names.forEach(n=>{const c=cards[n.toLowerCase()];if(!c)return;qty.set(c.n,(qty.get(c.n)||0)+m.get(n));if(foilQ.get(n))foilN.set(c.n,(foilN.get(c.n)||0)+foilQ.get(n));const raw=metaRaw.get(n),o=meta.get(c.n)||{sets:new Set(),rars:new Set(),pr:new Map()};if(raw){raw.sets.forEach(x=>o.sets.add(x));raw.rars.forEach(x=>o.rars.add(x));if(raw.pr)raw.pr.forEach((v,k)=>{if(!o.pr.has(k))o.pr.set(k,v)})}meta.set(c.n,o)});
  RB.cp[1]=Math.min(12,Math.max(1,...qty.values()));flt.r.cp=[1,RB.cp[1]];fillOpts();syncBars();
  msg((lib.length?`Loaded ${lib.length} unique cards.`:'No cards could be loaded.')
   +(failed?` Scryfall didn't respond for ${failed} cards, so they're missing for now. Click Load collection again to retry just those.`:'')
@@ -549,7 +552,7 @@ const rOn=k=>flt.r[k][0]>RB[k][0]||flt.r[k][1]<RB[k][1];
 const inR=(k,v)=>v>=flt.r[k][0]&&(flt.r[k][1]>=RB[k][1]||v<=flt.r[k][1]);
 const active=t=>t.length>0||Object.keys(flt.r).some(rOn)||flt.types.size>0||flt.cols.size>0||!!flt.set||!!flt.rar;
 const metaOf=c=>{const o=meta.get(c.n);return{sets:o&&o.sets.size?o.sets:new Set(c.sn?[c.sn]:[]),rars:o&&o.rars.size?o.rars:new Set(c.r?[c.r]:[])}};
-function addMeta(n,st,rr){const o=metaRaw.get(n)||{sets:new Set(),rars:new Set()};if(st&&st.trim())o.sets.add(st.trim());if(rr&&rr.trim())o.rars.add(rr.trim().toLowerCase());metaRaw.set(n,o)}
+function addMeta(n,st,rr,id){const o=metaRaw.get(n)||{sets:new Set(),rars:new Set(),pr:new Map()};if(st&&st.trim()){o.sets.add(st.trim());if(id&&!o.pr.has(st.trim()))o.pr.set(st.trim(),id)}if(rr&&rr.trim())o.rars.add(rr.trim().toLowerCase());metaRaw.set(n,o)}
 function passes(c){
  if(!inR('mv',c.cmc))return false;
  if(rOn('pw')&&(c.pw===''||c.pw==null||!inR('pw',num(c.pw))))return false;
@@ -613,18 +616,23 @@ function renderG(){const terms=parseQ($('#gsearch').value),on=active(terms);
  const r=lib.filter(c=>passes(c)&&matches(c,terms)).sort(sorter(flt.sortG)),el=$('#gres'),grid=gv.mode=='cards',cap=grid?240:300;
  $('#gcount').textContent=on?`${r.length} card${r.length==1?'':'s'} match`:`${lib.length} unique cards in your collection. Type or use the filters to search.`;
  el.className=grid?'gg':'list';el.style.setProperty('--gc',gv.cols);
- const tile=c=>{const q=qty.get(c.n)||1;return`<div class="gc" tabindex="0" data-n="${enc(c.n)}">${c.img?`<img loading="lazy" src="${esc(c.img.replace('/small/','/normal/'))}" alt="${esc(c.n)}">`:`<span class="gnm">${esc(c.n)}<br><span class="m">${esc(c.mc)}</span></span>`}${q>1?`<span class="gq">\u00d7${q}</span>`:''}</div>`};
+ const tile=c=>{const q=qty.get(c.n)||1,im=printImgs(c)[0];return`<div class="gc" tabindex="0" data-n="${enc(c.n)}">${im?`<img loading="lazy" src="${esc(im)}" alt="${esc(c.n)}">`:`<span class="gnm">${esc(c.n)}<br><span class="m">${esc(c.mc)}</span></span>`}${q>1?`<span class="gq">\u00d7${q}</span>`:''}</div>`};
  el.innerHTML=on?r.slice(0,cap).map(grid?tile:c=>`<div class="row" tabindex="0" data-n="${enc(c.n)}">${rowHtml(c)}<span class="c">${c.mc}<button class="info" data-info="${enc(c.n)}" aria-label="Show details for ${c.n}">i</button></span></div>`).join('')+(r.length>cap?`<p class="m" style="grid-column:1/-1">Showing the first ${cap}. Narrow your search to see the rest.</p>`:''):''}
 document.addEventListener('click',e=>{const m=e.target.dataset&&e.target.dataset.gmode;if(m){gv.mode=m;gsaveView();gviewUi();renderG()}});
 $('#gcols').oninput=e=>{gv.cols=+e.target.value;$('#gcolsv').textContent=gv.cols;gsaveView();$('#gres').style.setProperty('--gc',gv.cols)};
 gviewUi();
 
 // ---------- card preview ----------
+// Card images for the collection search follow the printing you own in the chosen set (Scryfall's image address is built from the card's ID).
+const imgUrl=(id,back)=>`https://cards.scryfall.io/normal/${back?'back':'front'}/${id[0]}/${id[1]}/${id}.jpg`;
+function printImgs(c){const sr=$('#tool-search');const id=sr&&!sr.hidden&&flt.set&&((meta.get(c.n)||{}).pr||new Map()).get(flt.set);
+ if(id)return[imgUrl(id,false),c.img2?imgUrl(id,true):''].filter(Boolean);
+ return[c.img,c.img2].filter(Boolean).map(u=>u.replace('/small/','/normal/'))}
 const esc=t=>String(t).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
 const find=n=>deck.get(n)||(typeof chkCards!='undefined'&&chkCards.get(n))||(dpool.get(n)||{}).c||dres.find(c=>c.n==n)||lib.find(c=>c.n==n)||(ups||[]).find(c=>c.n==n)||(cmd&&cmd.n==n?cmd:null);
 let pinned=null,lastPos=[0,0];
-function showTip(c,x,y){const t=$('#tip'),ims=[c.img,c.img2].filter(Boolean);t.classList.toggle('dfc',ims.length>1);
- t.innerHTML=(ims.length?`<div class="imgs">${ims.map(u=>`<img src="${esc(u.replace('/small/','/normal/'))}" alt="${esc(c.n)}" onload="placeTip(...lastPos)">`).join('')}</div>`:'')+`<div><b>${esc(c.n)}</b> <span class="m">${esc(c.mc)}</span><div class="m">${esc(c.t)}</div><div style="white-space:pre-line;margin-top:4px">${esc(c.o.split('\n//\n').join('\n\u2014 other face \u2014\n'))}</div><div class="m" style="margin-top:4px">${ownSet.has(c.n)?'Owned':'Not owned'}${c.p?' \u00b7 '+eur(c.p):''}</div></div>`;
+function showTip(c,x,y){const t=$('#tip'),ims=printImgs(c);t.classList.toggle('dfc',ims.length>1);
+ t.innerHTML=(ims.length?`<div class="imgs">${ims.map(u=>`<img src="${esc(u)}" alt="${esc(c.n)}" onload="placeTip(...lastPos)">`).join('')}</div>`:'')+`<div><b>${esc(c.n)}</b> <span class="m">${esc(c.mc)}</span><div class="m">${esc(c.t)}</div><div style="white-space:pre-line;margin-top:4px">${esc(c.o.split('\n//\n').join('\n\u2014 other face \u2014\n'))}</div><div class="m" style="margin-top:4px">${ownSet.has(c.n)?'Owned':'Not owned'}${c.p?' \u00b7 '+eur(c.p):''}</div></div>`;
  t.hidden=false;placeTip(x,y)}
 function placeTip(x,y){lastPos=[x,y];const t=$('#tip'),w=t.offsetWidth,h=t.offsetHeight;
  let l=x+16,tp=y+16;if(l+w>innerWidth-8)l=x-w-16;if(l<8)l=8;if(tp+h>innerHeight-8)tp=innerHeight-h-8;if(tp<8)tp=8;
@@ -652,10 +660,10 @@ const idb={db:null,open(){return this.db||(this.db=new Promise((res,rej)=>{const
  async get(k){try{const d=await this.open();return await new Promise(res=>{const q=d.transaction('kv').objectStore('kv').get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>res(undefined)})}catch(e){return undefined}},
  async set(k,v){try{const d=await this.open();return await new Promise(res=>{const t=d.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=()=>res(true);t.onerror=()=>res(false)})}catch(e){return false}}};
 let collT=0;
-const collPayload=()=>({t:collT,lib,qty:[...qty],foil:[...foilN],meta:[...meta].map(([k,v])=>[k,{sets:[...v.sets],rars:[...v.rars]}])});
+const collPayload=()=>({t:collT,lib,qty:[...qty],foil:[...foilN],meta:[...meta].map(([k,v])=>[k,{sets:[...v.sets],rars:[...v.rars],pr:[...(v.pr||[])]}])});
 const persist=()=>idb.set('coll',collPayload());
 function applyColl(d){if(!d||!d.lib||!d.lib.length||d.lib[0].fm===undefined)return false;
- lib=d.lib;qty=new Map(d.qty);foilN=new Map(d.foil||[]);collT=d.t;meta=new Map((d.meta||[]).map(([k,v])=>[k,{sets:new Set(v.sets),rars:new Set(v.rars)}]));
+ lib=d.lib;qty=new Map(d.qty);foilN=new Map(d.foil||[]);collT=d.t;meta=new Map((d.meta||[]).map(([k,v])=>[k,{sets:new Set(v.sets),rars:new Set(v.rars),pr:new Map(v.pr||[])}]));
  ownSet=new Set(lib.map(c=>c.n));RB.cp[1]=Math.min(12,Math.max(1,...qty.values()));flt.r.cp=[1,RB.cp[1]];fillOpts();syncBars();return true}
 async function restore(){applyColl(await idb.get('coll'))}
 const hDatesN=()=>Object.keys(hist.d).length;
@@ -910,10 +918,14 @@ function contribHtml(rows){
  const so={};rr.forEach(r=>so[r.set]=(so[r.set]||0)+r.v);const sa=Object.entries(so).sort((a,b)=>b[1]-a[1]),sets=sa.slice(0,7).map(([k,v],i)=>({label:k,v,color:SPAL[i]}));const sr=sa.slice(7).reduce((a,x)=>a+x[1],0);if(sr)sets.push({label:'Other sets ('+(sa.length-7)+')',v:sr,color:SPAL[7]});
  const top=rows.slice().sort((a,b)=>b.v-a.v),t5=top.slice(0,5).map((r,i)=>({label:r.c.n,v:r.v,color:SPAL[i]})),rest=top.slice(5).reduce((a,r)=>a+r.v,0);if(rest)t5.push({label:'All other cards',v:rest,color:SPAL[7]});
  const t10=top.slice(0,10).reduce((a,r)=>a+r.v,0);
- return`<div class="donuts">`+donut('By colour identity',groupItems(rr,r=>colKey(r.c),['W','U','B','R','G','Multicolour','Colourless'],k=>CCOL[k],k=>CNAME[k]||k),'\u00a3')
-  +donut('By rarity',groupItems(rr,r=>rord.includes(r.rar)?r.rar:'other',[...rord,'other'],(k,i)=>SPAL[i],k=>k[0].toUpperCase()+k.slice(1)),'\u00a3')
-  +donut('By card type',groupItems(rr,r=>tyOf(r.c),['Creature','Instant','Sorcery','Artifact','Enchantment','Planeswalker','Land','Other'],(k,i)=>SPAL[i]),'\u00a3')
-  +donut('By set',sets,'\u00a3')+donut('Your five most valuable cards',t5,'\u00a3')+`</div><p class="m">Your ten most valuable cards make up ${Math.round(t10/tot*100)}% of the total. Shares use the latest recorded prices, and follow the filter above.</p>`}
+ pcG={colour:['By colour identity',groupItems(rr,r=>colKey(r.c),['W','U','B','R','G','Multicolour','Colourless'],k=>CCOL[k],k=>CNAME[k]||k)],
+  rarity:['By rarity',groupItems(rr,r=>rord.includes(r.rar)?r.rar:'other',[...rord,'other'],(k,i)=>SPAL[i],k=>k[0].toUpperCase()+k.slice(1))],
+  type:['By card type',groupItems(rr,r=>tyOf(r.c),['Creature','Instant','Sorcery','Artifact','Enchantment','Planeswalker','Land','Other'],(k,i)=>SPAL[i])],
+  set:['By set',sets],top:['Five most valuable cards',t5]};
+ if(!pcG[pcSel])pcSel='colour';
+ return`<label class="m">Show value by <select id="pcsel" aria-label="Break the value down by">${Object.entries(pcG).map(([k,v])=>`<option value="${k}"${k==pcSel?' selected':''}>${v[0].replace(/^By /,'')}</option>`).join('')}</select></label><div class="dnbig" id="pcdn">${donut(pcG[pcSel][0],pcG[pcSel][1],'\u00a3')}</div><p class="m">Your ten most valuable cards make up ${Math.round(t10/tot*100)}% of the total. Shares use the latest recorded prices, and follow the filter above.</p>`}
+let pcG={},pcSel='colour';
+document.addEventListener('change',e=>{if(e.target.id=='pcsel'){pcSel=e.target.value;$('#pcdn').innerHTML=donut(pcG[pcSel][0],pcG[pcSel][1],'\u00a3')}});
 function renderPCard(cut){
  const n=pr.sel,el=$('#pcard');if(!n){el.innerHTML='<p class="m">Search above, or click any card in the lists, to see its price history.</p>';return}
  cut=cut||cutoff();const c=lib.find(x=>x.n==n);if(!c){el.innerHTML='';return}
