@@ -67,6 +67,7 @@ label.row input{margin-right:6px}
 .tile:not(:disabled):hover{border-color:var(--gold)}.tile:disabled{opacity:.45;cursor:not-allowed}
 .star[aria-pressed=true]{color:var(--gold);border-color:var(--gold)}
 header{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px}header p{margin:0}header .alt{margin-left:auto}
+.fbar#fbarP [data-f=sort]{display:none}
 .kpis{display:flex;flex-wrap:wrap;gap:8px 32px;margin:12px 0}.kpis b{font-size:22px;display:block;font-weight:600}.good{color:#7bc47f}.chart{width:100%;height:auto;display:block}
 .fdet summary{cursor:pointer;color:var(--gold);margin-bottom:6px}
 .fin{display:grid;gap:10px}
@@ -182,7 +183,10 @@ header{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px}header p{marg
 <section class="panel"><h2>Automatic daily recording</h2><div class="m" id="pauto"></div>
 <p class="m">A free GitHub job can record prices every night, even when you don't open the app. It records your cards plus every card currently legal in Standard, so a card you add from Standard already has history. Cards from outside Standard start when they're added to cards.json. That list holds names only, no quantities or values. See SETUP.md for the steps.</p>
 <div class="tools"><button class="alt" id="pcards">Download cards.json</button></div></section>
-<section class="panel"><h2>Collection value</h2><div class="chips" id="prange"></div><div class="kpis" id="pkpi"></div><div id="pchart"></div><div class="m" id="pcov"></div></section>
+<section class="panel"><h2>Filter</h2><p class="m">Narrow everything below to matching cards, for example <code>dinosaur</code> to see what your Dinosaurs are worth. It uses the same search and filters as the other tools.</p>
+<input type="search" id="pfs" placeholder="Search names, types and rules text" aria-label="Filter the price tracker">
+<div class="fbar" id="fbarP"></div><div class="m" id="pfcount" role="status"></div></section>
+<section class="panel"><h2 id="ptitle">Collection value</h2><div class="chips" id="prange"></div><div class="kpis" id="pkpi"></div><div id="pchart"></div><div class="m" id="pcov"></div></section>
 <section class="cols"><div class="panel"><h2>Biggest movers</h2><div id="pmov"></div></div><div class="panel"><h2>Most valuable cards</h2><div class="list" id="ptop"></div></div></section>
 <section class="panel"><h2>Single card</h2><input type="search" id="pq" placeholder="Search your collection by name" aria-label="Search a card to see its price history"><div class="list" id="pres" style="max-height:200px"></div><div id="pcard"></div></section>
 </div>
@@ -483,7 +487,7 @@ const rowHtml=c=>`<span>${c.n}${qty.get(c.n)>1?` <span class="m">\u00d7${qty.get
 const RB={mv:[0,15],pw:[0,15],tg:[0,15],cp:[1,1]},RL={mv:'Mana value',pw:'Power',tg:'Toughness',cp:'Copies owned'};
 const TYPES=['Creature','Instant','Sorcery','Artifact','Enchantment','Planeswalker','Land'];
 const COLS=[['W','White'],['U','Blue'],['B','Black'],['R','Red'],['G','Green'],['C','Colourless']];
-const flt={r:{mv:[0,15],pw:[0,15],tg:[0,15],cp:[1,1]},types:new Set(),cols:new Set(),mode:'within',set:'',rar:'',sortG:'name',sortS:'syn',sortT:'name'};
+const flt={r:{mv:[0,15],pw:[0,15],tg:[0,15],cp:[1,1]},types:new Set(),cols:new Set(),mode:'within',set:'',rar:'',sortG:'name',sortS:'syn',sortT:'name',sortP:'name'};
 let meta=new Map(),metaRaw=new Map();
 const num=v=>{const n=parseInt(v);return isNaN(n)?0:n};
 const rOn=k=>flt.r[k][0]>RB[k][0]||flt.r[k][1]<RB[k][1];
@@ -531,13 +535,13 @@ function syncBars(){document.querySelectorAll('.fbar').forEach(b=>{
  b.querySelectorAll('[data-col]').forEach(x=>x.setAttribute('aria-pressed',flt.cols.has(x.dataset.col)));
  b.querySelector('[data-f=mode]').value=flt.mode;
  b.querySelector('[data-f=set]').value=flt.set;b.querySelector('[data-f=rar]').value=flt.rar;
- const so=b.querySelector('[data-f=sort]');so.value=flt['sort'+({fbarG:'G',fbarS:'S',fbarT:'T'}[b.id])];[...so.options].forEach(o=>o.disabled=o.value=='syn'&&(b.id=='fbarT'||!cmd))})}
-const refresh=()=>{renderG();if(cmd)render();if(!$('#tool-sixty').hidden)ssearch()};
+ const so=b.querySelector('[data-f=sort]');so.value=flt['sort'+({fbarG:'G',fbarS:'S',fbarT:'T',fbarP:'P'}[b.id])];[...so.options].forEach(o=>o.disabled=o.value=='syn'&&(b.id=='fbarT'||b.id=='fbarP'||!cmd))})}
+const refresh=()=>{renderG();if(cmd)render();if(!$('#tool-sixty').hidden)ssearch();if(!$('#tool-price').hidden)renderPrice()};
 document.addEventListener('input',e=>{const t=e.target,k=t.dataset&&t.dataset.r;if(!k)return;
  const v=+t.value,r=flt.r[k];if(t.dataset.end=='min')r[0]=Math.min(v,r[1]);else r[1]=Math.max(v,r[0]);syncBars();refresh()});
 document.addEventListener('change',e=>{const t=e.target,f=t.dataset&&t.dataset.f;if(!f)return;
  if(f=='mode')flt.mode=t.value;else if(f=='set')flt.set=t.value;else if(f=='rar')flt.rar=t.value;
- else if(f=='sort')flt['sort'+({fbarG:'G',fbarS:'S',fbarT:'T'}[t.closest('.fbar').id])]=t.value
+ else if(f=='sort')flt['sort'+({fbarG:'G',fbarS:'S',fbarT:'T',fbarP:'P'}[t.closest('.fbar').id])]=t.value
  syncBars();refresh()});
 document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('.fbar button');if(!b)return;
  if(b.dataset.col){const k=b.dataset.col;flt.cols.has(k)?flt.cols.delete(k):flt.cols.add(k)}
@@ -741,7 +745,8 @@ const hDates=()=>Object.keys(hist.d).sort();
 const saveHist=()=>idb.set('prices',hist);
 // value of the copies you own: normal copies at the normal price, foils at the foil price (each falls back to the other if missing)
 const cv=(n,pe)=>{if(!pe)return 0;const q=qty.get(n)||1,f=Math.min(q,foilN.get(n)||0),e=pe[0]??pe[1]??0,ff=pe[1]??pe[0]??0;return(q-f)*e+f*ff};
-function allSeries(){const last=new Map();return hDates().map(d=>{for(const n in hist.d[d])last.set(n,hist.d[d][n]);let t=0;lib.forEach(c=>{t+=cv(c.n,last.get(c.n))});return{d,t:t*rt(d)}})}
+const pTerms=()=>parseQ($('#pfs').value),subset=()=>{const t=pTerms();return lib.filter(c=>passes(c)&&matches(c,t))};
+function allSeries(L){L=L||lib;const last=new Map();return hDates().map(d=>{for(const n in hist.d[d])last.set(n,hist.d[d][n]);let t=0;L.forEach(c=>{t+=cv(c.n,last.get(c.n))});return{d,t:t*rt(d)}})}
 function stateAt(day){const last=new Map();for(const d of hDates()){if(d>day)break;for(const n in hist.d[d])last.set(n,hist.d[d][n])}return last}
 
 // exchange rate: GBP per EUR. Each day's rate is kept so the history is valued in pounds as it was that day.
@@ -805,21 +810,24 @@ const cutoff=()=>{const ds=hDates();if(!ds.length)return'';const k=RNG.find(r=>r
 const chg=(a,b)=>{const d=b-a,p=a?d/a*100:0;return`<span class="${d>=0?'good':'bad'}">${d>=0?'▲':'▼'} ${sg(d)} (${d>=0?'+':'−'}${Math.abs(p).toFixed(1)}%)</span>`};
 const prow=(c,right)=>`<div class="row" tabindex="0" data-pc="${enc(c.n)}" data-n="${enc(c.n)}"><span>${esc(c.n)}${qty.get(c.n)>1?` <span class="m">×${qty.get(c.n)}</span>`:''}</span><span class="c">${right}</span></div>`;
 function renderPrice(){
- const ds=hDates(),el=$('#pchart');
+ const ds=hDates(),el=$('#pchart'),sub=subset(),fon=active(pTerms());
+ $('#pfcount').textContent=fon?`${sub.length} card${sub.length==1?'':'s'} match. Everything below covers just these cards.`:`Showing your whole collection (${lib.length} cards).`;
+ $('#ptitle').textContent=fon?'Value of matching cards':'Collection value';
  renderPriceStatus();
  $('#prange').innerHTML=RNG.map(([k])=>`<button class="chip wide" data-rg="${k}" aria-pressed="${pr.range==k}">${k}</button>`).join('');
  if(!ds.length){$('#pkpi').innerHTML='';el.innerHTML='<p class="m">No prices recorded yet. Click <b>Record prices now</b>. It takes a few seconds, and the app will also record automatically the first time you open it each day.</p>';$('#pmov').innerHTML='';$('#ptop').innerHTML='';$('#pcard').innerHTML='';return}
- const all=allSeries(),cut=cutoff(),pts=all.filter(p=>p.d>=cut),last=all[all.length-1];
+ if(!sub.length){$('#pkpi').innerHTML='';el.innerHTML='<p class="m">No cards match these filters.</p>';$('#pmov').innerHTML='';$('#ptop').innerHTML='';$('#pcov').textContent='';renderPCard();return}
+ const all=allSeries(sub),cut=cutoff(),pts=all.filter(p=>p.d>=cut),last=all[all.length-1];
  $('#pkpi').innerHTML=`<div><b>${gb(last.t)}</b><span class="m">Collection value on ${fd(last.d)}</span></div>`+(pts.length>1?`<div><b>${chg(pts[0].t,last.t)}</b><span class="m">Since ${fd(pts[0].d)}</span></div>`:'')+`<div><b>${ds.length}</b><span class="m">day${ds.length==1?'':'s'} of history</span></div>`;
  el.innerHTML=pts.length>1?lineSvg(pts):`<p class="m">The chart needs at least two recorded days in this range. ${ds.length==1?'You have one so far, and the app adds one each day you open it.':'Try a longer range.'}</p>`;
  $('#pcov').textContent=ds.length>1?`Points are the days a snapshot was recorded, so days you didn't open the app show as gaps. Prices are Cardmarket averages converted from euros to pounds at each day's exchange rate. Cardmarket itself prices in euros, so these are conversions, not UK prices.`:'';
  // movers
- if(pts.length>1){const a=stateAt(pts[0].d),b=stateAt(last.d),rows=lib.filter(c=>a.get(c.n)&&b.get(c.n)).map(c=>({c,d:cv(c.n,b.get(c.n))*rt(last.d)-cv(c.n,a.get(c.n))*rt(pts[0].d)})).filter(r=>Math.abs(r.d)>=.005).sort((x,y)=>y.d-x.d);
+ if(pts.length>1){const a=stateAt(pts[0].d),b=stateAt(last.d),rows=sub.filter(c=>a.get(c.n)&&b.get(c.n)).map(c=>({c,d:cv(c.n,b.get(c.n))*rt(last.d)-cv(c.n,a.get(c.n))*rt(pts[0].d)})).filter(r=>Math.abs(r.d)>=.005).sort((x,y)=>y.d-x.d);
   const up=rows.filter(r=>r.d>0).slice(0,8),dn=rows.filter(r=>r.d<0).slice(-8).reverse();
   $('#pmov').innerHTML=`<h4>Biggest gains</h4>${up.map(r=>prow(r.c,`<span class="good">${sg(r.d)}</span>`)).join('')||'<p class="m">None.</p>'}<h4>Biggest drops</h4>${dn.map(r=>prow(r.c,`<span class="bad">${sg(r.d)}</span>`)).join('')||'<p class="m">None.</p>'}`}
  else $('#pmov').innerHTML='<p class="m">Movers appear once there are two recorded days in the range.</p>';
  const b=stateAt(last.d);
- $('#ptop').innerHTML=lib.map(c=>({c,v:cv(c.n,b.get(c.n))*rt(last.d),u:((b.get(c.n)||[])[0]??(b.get(c.n)||[])[1])*rt(last.d)})).filter(r=>r.v>0).sort((x,y)=>y.v-x.v).slice(0,25).map(r=>prow(r.c,`${gb(r.v)}${qty.get(r.c.n)>1?` <span class="m">(${gb(r.u||0)} each)</span>`:''}`)).join('')||'<p class="m">No priced cards.</p>';
+ $('#ptop').innerHTML=sub.map(c=>({c,v:cv(c.n,b.get(c.n))*rt(last.d),u:((b.get(c.n)||[])[0]??(b.get(c.n)||[])[1])*rt(last.d)})).filter(r=>r.v>0).sort((x,y)=>y.v-x.v).slice(0,25).map(r=>prow(r.c,`${gb(r.v)}${qty.get(r.c.n)>1?` <span class="m">(${gb(r.u||0)} each)</span>`:''}`)).join('')||'<p class="m">No priced cards.</p>';
  renderPCard(cut)}
 function renderPCard(cut){
  const n=pr.sel,el=$('#pcard');if(!n){el.innerHTML='<p class="m">Search above, or click any card in the lists, to see its price history.</p>';return}
@@ -831,8 +839,9 @@ $('#tool-price').addEventListener('click',e=>{const t=e.target.closest('[data-rg
  if(t.id=='psnap')snapshot();
  else if(t.dataset.rg){pr.range=t.dataset.rg;renderPrice()}
  else{pr.sel=decodeURIComponent(t.dataset.pc);renderPCard();$('#pcard').scrollIntoView({behavior:'smooth',block:'nearest'})}});
-$('#pq').oninput=()=>{const q=$('#pq').value.trim().toLowerCase();
- $('#pres').innerHTML=q?lib.filter(c=>c.n.toLowerCase().includes(q)).slice(0,8).map(c=>prow(c,esc(c.mc))).join('')||'<p class="m">No match.</p>':''};
+$('#pq').oninput=()=>{const q=$('#pq').value.trim(),t=parseQ(q);
+ $('#pres').innerHTML=q?lib.filter(c=>passes(c)&&matches(c,t)).slice(0,12).map(c=>prow(c,esc(c.mc))).join('')||'<p class="m">No match.</p>':''};
+$('#pfs').oninput=renderPrice;
 
 // ---------- backup ----------
 function exportBackup(){const b={v:1,saved:new Date().toISOString(),coll:collPayload(),pool:[...dpool],prices:hist};
@@ -852,7 +861,7 @@ $('#pcards').onclick=downloadCards;$('#bexp').onclick=exportBackup;$('#bimp').on
 $('#file').onchange=e=>{const f=e.target.files[0];if(f)f.text().then(t=>{$('#paste').value=t;msg(`Read ${f.name}. Click Load collection.`)})};
 $('#go').onclick=load;
 $('#clear').onclick=async()=>{cards={};lib=[];qty=new Map();ownSet=new Set();dpool=new Map();dout=null;await idb.set('cards',{});await idb.set('coll',null);await idb.set('pool',null);try{localStorage.removeItem(CK)}catch(e){}homeStatus();msg('Saved collection, pool and card data cleared. Your price history was kept.')};
-$('#fbarG').innerHTML=barHtml();$('#fbarS').innerHTML=barHtml();$('#fbarT').innerHTML=barHtml();syncBars();
+$('#fbarG').innerHTML=barHtml();$('#fbarS').innerHTML=barHtml();$('#fbarT').innerHTML=barHtml();$('#fbarP').innerHTML=barHtml();syncBars();
 $('#csearch').oninput=showCmds;$('#gsearch').oninput=renderG;$('#fitOnly').onchange=$('#hideDeck').onchange=()=>cmd&&render();$('#ssearch').oninput=()=>cmd&&render();
 $('#auto').onclick=auto;
 $('#back').onclick=()=>{$('#s3').hidden=true;$('#s2').scrollIntoView({behavior:'smooth'})};
