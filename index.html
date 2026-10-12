@@ -68,6 +68,8 @@ label.row input{margin-right:6px}
 .star[aria-pressed=true]{color:var(--gold);border-color:var(--gold)}
 header{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px}header p{margin:0}header .alt{margin-left:auto}
 .fbar#fbarP [data-f=sort]{display:none}
+.chk{list-style:none;padding:0;margin:6px 0}.chk li{display:flex;gap:8px;padding:2px 0}.ic{width:1.3em;text-align:center;font-weight:700}.ic.ok{color:#7bc47f}.ic.warn{color:var(--gold)}.ic.bad{color:var(--bad)}.ic.info{color:var(--mut)}
+.sr{position:absolute;left:-9999px}.miss{color:var(--bad)}.part{color:var(--gold)}.brk{margin:10px 0;padding:10px;border:1px solid var(--line);border-radius:8px}
 .kpis{display:flex;flex-wrap:wrap;gap:8px 32px;margin:12px 0}.kpis b{font-size:22px;display:block;font-weight:600}.good{color:#7bc47f}.chart{width:100%;height:auto;display:block}
 .fdet summary{cursor:pointer;color:var(--gold);margin-bottom:6px}
 .fin{display:grid;gap:10px}
@@ -94,6 +96,7 @@ header{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px}header p{marg
 <section class="panel"><h2>Tools</h2><div class="tiles">
 <button class="tile" data-tool="cmd" data-needs disabled>Commander deck builder<br><span class="m">Build a 100-card deck from your collection around a commander.</span></button>
 <button class="tile" data-tool="draft">40-card draft builder<br><span class="m">Turn a drafted pool into a deck, built around the cards you pick.</span></button>
+<button class="tile" data-tool="check" data-needs disabled>Deck checker<br><span class="m">Paste a decklist to see what you own, what the rest costs, and how healthy it is.</span></button>
 <button class="tile" data-tool="price" data-needs disabled>Price tracker<br><span class="m">Track what your collection and each card is worth over time.</span></button>
 <button class="tile" data-tool="sixty" data-needs disabled>60-card deck builder<br><span class="m">Build around a few cards from your collection, up to four copies each.</span></button>
 </div></section>
@@ -120,7 +123,7 @@ header{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px}header p{marg
 <h2 id="dtitle"></h2>
 <div class="m" id="dsub"></div>
 <div class="m" id="dstat"></div>
-<div class="tools"><button id="auto">Auto-build deck</button><button class="alt" id="copy">Copy list</button><button class="alt" id="dl">Download .txt</button><button class="alt" id="back">Change commander</button></div>
+<div class="tools"><button id="auto">Auto-build deck</button><button class="alt" id="copy">Copy list</button><button class="alt" id="tochk">Check this deck</button><button class="alt" id="dl">Download .txt</button><button class="alt" id="back">Change commander</button></div>
 <div id="warn" class="bad m"></div>
 <div class="bars" id="curve" aria-label="Mana curve"></div>
 <div class="list" id="deck"></div>
@@ -189,6 +192,16 @@ header{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px}header p{marg
 <section class="panel"><h2 id="ptitle">Collection value</h2><div class="chips" id="prange"></div><div class="kpis" id="pkpi"></div><div id="pchart"></div><div class="m" id="pcov"></div></section>
 <section class="cols"><div class="panel"><h2>Biggest movers</h2><div id="pmov"></div></div><div class="panel"><h2>Most valuable cards</h2><div class="list" id="ptop"></div></div></section>
 <section class="panel"><h2>Single card</h2><input type="search" id="pq" placeholder="Search your collection by name" aria-label="Search a card to see its price history"><div class="list" id="pres" style="max-height:200px"></div><div id="pcard"></div></section>
+</div>
+<div id="tool-check" class="view" hidden>
+<section class="panel"><h2>Deck checker</h2><p class="m">Paste a decklist from Moxfield, Archidekt, ManaBox or plain text. You'll see which cards you own, what the missing ones cost in pounds, and a set of deck health checks. Commander decks also get an estimated Commander Bracket.</p>
+<textarea id="chkText" style="height:220px" placeholder="1 Sol Ring&#10;1 Arcane Signet&#10;...&#10;&#10;Tip: put a Commander heading above your commander, or fill in the commander box below." aria-label="Decklist"></textarea>
+<div class="chips"><select id="chkFmt" aria-label="Format"><option value="auto">Detect format</option><option value="commander">Commander</option><option value="standard">Standard</option><option value="pioneer">Pioneer</option><option value="modern">Modern</option><option value="legacy">Legacy</option><option value="casual60">60-card (any cards)</option><option value="40">40-card (draft)</option></select>
+<input type="text" id="chkCmd" placeholder="Commander (optional)" aria-label="Commander" style="max-width:260px">
+<button id="chkGo">Check deck</button><button class="alt" id="chkClear">Clear</button></div>
+<label class="m"><input type="checkbox" id="chkMiss"> Only list cards I'm missing</label>
+<div class="m" id="chkMsg" role="status"></div></section>
+<section class="panel" id="chkOut" hidden></section>
 </div>
 </main>
 <div id="tip" hidden role="tooltip"></div>
@@ -555,7 +568,7 @@ function renderG(){const terms=parseQ($('#gsearch').value),on=active(terms);
 
 // ---------- card preview ----------
 const esc=t=>String(t).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
-const find=n=>deck.get(n)||(dpool.get(n)||{}).c||dres.find(c=>c.n==n)||lib.find(c=>c.n==n)||(ups||[]).find(c=>c.n==n)||(cmd&&cmd.n==n?cmd:null);
+const find=n=>deck.get(n)||(typeof chkCards!='undefined'&&chkCards.get(n))||(dpool.get(n)||{}).c||dres.find(c=>c.n==n)||lib.find(c=>c.n==n)||(ups||[]).find(c=>c.n==n)||(cmd&&cmd.n==n?cmd:null);
 let pinned=null,lastPos=[0,0];
 function showTip(c,x,y){const t=$('#tip'),ims=[c.img,c.img2].filter(Boolean);t.classList.toggle('dfc',ims.length>1);
  t.innerHTML=(ims.length?`<div class="imgs">${ims.map(u=>`<img src="${esc(u.replace('/small/','/normal/'))}" alt="${esc(c.n)}" onload="placeTip(...lastPos)">`).join('')}</div>`:'')+`<div><b>${esc(c.n)}</b> <span class="m">${esc(c.mc)}</span><div class="m">${esc(c.t)}</div><div style="white-space:pre-line;margin-top:4px">${esc(c.o.split('\n//\n').join('\n\u2014 other face \u2014\n'))}</div><div class="m" style="margin-top:4px">${ownSet.has(c.n)?'Owned':'Not owned'}${c.p?' \u00b7 '+eur(c.p):''}</div></div>`;
@@ -578,6 +591,7 @@ document.addEventListener('keydown',e=>{if(e.key=='Escape')hideTip(true)});
 // ---------- export ----------
 const listText=()=>['1 '+cmd.n,'',...[...deck.keys()].sort().map(n=>'1 '+n),...Object.entries(basics).filter(([,n])=>n>0).map(([b,n])=>n+' '+b)].join('\n');
 $('#copy').onclick=async()=>{try{await navigator.clipboard.writeText(listText());$('#copy').textContent='Copied'}catch(e){$('#copy').textContent='Copy failed'}setTimeout(()=>$('#copy').textContent='Copy list',1500)};
+$('#tochk').onclick=()=>cmd&&chkLoad(listText(),'commander',cmd.n);
 $('#dl').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([listText()],{type:'text/plain'}));a.download=cmd.n.replace(/[^\w]+/g,'-')+'.txt';a.click()};
 
 // ---------- storage ----------
@@ -595,7 +609,7 @@ const hDatesN=()=>Object.keys(hist.d).length;
 function homeStatus(){const n=lib.length;
  $('#hstat').innerHTML=n?`<b>${n} unique cards</b> in your saved collection${collT?` (loaded ${new Date(collT).toLocaleDateString()})`:''}. It stays in this browser, so you only need to import again when your collection changes.`+(hDatesN()?` Price history: ${hDatesN()} day${hDatesN()==1?'':'s'}.`:''):'No collection loaded yet. Import one above to unlock the Commander builder.';
  document.querySelectorAll('.tile[data-needs]').forEach(b=>b.disabled=!n)}
-function openTool(t){['home','cmd','draft','sixty','price'].forEach(k=>$(k=='home'?'#home':'#tool-'+k).hidden=k!=t);$('#homeBtn').hidden=t=='home';
+function openTool(t){['home','cmd','draft','sixty','price','check'].forEach(k=>$(k=='home'?'#home':'#tool-'+k).hidden=k!=t);$('#homeBtn').hidden=t=='home';
  if(t=='cmd'){$('#s2').hidden=false;$('#s5').hidden=false;showCmds();renderG()}
  if(t=='draft')initDraft();if(t=='sixty')ssearch();if(t=='price')renderPrice();scrollTo(0,0)}
 
@@ -609,7 +623,7 @@ function deckHtml(d,title,need,locked){
  const nb=Object.values(d.basics).reduce((a,b)=>a+b,0),cur=Array(7).fill(0);d.spells.forEach(c=>cur[Math.min(6,Math.floor(c.cmc))]++);const mx=Math.max(1,...cur);
  const cre=d.spells.filter(c=>tyOf(c)=='Creature').length,avg=d.spells.length?(d.spells.reduce((a,c)=>a+c.cmc,0)/d.spells.length).toFixed(1):'-';
  const lm=new Map();d.lands.forEach(c=>lm.set(c.n,{c,n:(lm.get(c.n)?lm.get(c.n).n:0)+1}));
- let h=`<h2>${title}: ${[...d.S].join('')||'colourless'}</h2><div class="m">Creatures ${cre} \u00b7 Other spells ${d.spells.length-cre} \u00b7 Lands ${d.lands.length+nb} \u00b7 Avg mana value ${avg}${d.spells.length<need?` \u00b7 Only ${d.spells.length} of ${need} spells could be filled from this pool`:''}</div><div class="tools"><button class="alt" data-copy>Copy list</button><button class="alt" data-dl>Download .txt</button></div><div class="bars">${cur.map((n,i)=>`<div><i style="height:${n/mx*50}px"></i>${i==6?'6+':i}<br>${n}</div>`).join('')}</div><div class="cols"><div>`;
+ let h=`<h2>${title}: ${[...d.S].join('')||'colourless'}</h2><div class="m">Creatures ${cre} \u00b7 Other spells ${d.spells.length-cre} \u00b7 Lands ${d.lands.length+nb} \u00b7 Avg mana value ${avg}${d.spells.length<need?` \u00b7 Only ${d.spells.length} of ${need} spells could be filled from this pool`:''}</div><div class="tools"><button class="alt" data-copy>Copy list</button><button class="alt" data-chk>Check this deck</button><button class="alt" data-dl>Download .txt</button></div><div class="bars">${cur.map((n,i)=>`<div><i style="height:${n/mx*50}px"></i>${i==6?'6+':i}<br>${n}</div>`).join('')}</div><div class="cols"><div>`;
  ['Creature','Planeswalker','Instant','Sorcery','Artifact','Enchantment','Other'].forEach(k=>{if(!g[k])return;h+=`<h4>${k=='Sorcery'?'Sorceries':k+'s'} (${[...g[k].values()].reduce((a,x)=>a+x.n,0)})</h4>`+[...g[k].values()].sort((a,b)=>a.c.cmc-b.c.cmc||a.c.n.localeCompare(b.c.n)).map(x=>`<div class="row" data-n="${enc(x.c.n)}"><span>${x.n>1?x.n+'\u00d7 ':''}${x.c.n}${locked(x.c.n)?' \u2605':''}</span><span class="c">${x.c.mc}</span></div>`).join('')});
  h+=`</div><div><h4>Lands (${d.lands.length+nb})</h4>`+[...lm.values()].map(x=>`<div class="row" data-n="${enc(x.c.n)}"><span>${x.n>1?x.n+'\u00d7 ':''}${x.c.n}</span></div>`).join('')+Object.entries(d.basics).filter(([,n])=>n).map(([b,n])=>`<div class="row"><span>${n}\u00d7 ${b}</span></div>`).join('')+(d.side?`<h4>Sideboard (${d.side.length})</h4><p class="m">${d.side.map(c=>c.n).join(', ')||'None'}</p>`:'')+`</div></div>`;
  return h}
@@ -705,6 +719,7 @@ $('#tool-sixty').addEventListener('click',e=>{if(e.target.closest('[data-info]')
  if(d.sdec||d.sinc||d.srm){const n=dn(d.sdec?'sdec':d.sinc?'sinc':'srm'),o=ba.get(n);if(d.srm||(d.sdec&&o.n<=1))ba.delete(n);else o.n=Math.max(1,Math.min(sMax(o.c),o.n+(d.sinc?1:-1)));renderSixty();return}
  const r=e.target.closest('[data-sadd]');if(r){const c=lib.find(x=>x.n==decodeURIComponent(r.dataset.sadd));if(c&&!ba.has(c.n))ba.set(c.n,{c,n:/Legendary/.test(c.t.split(' // ')[0])?1:sMax(c)});renderSixty();return}
  if(d.copy!==undefined)navigator.clipboard.writeText(dText(sout)).then(()=>e.target.textContent='Copied',()=>e.target.textContent='Copy failed');
+ if(d.chk!==undefined)chkLoad(dText(sout),'casual60');
  if(d.dl!==undefined){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([dText(sout)],{type:'text/plain'}));a.download='60-card-deck.txt';a.click()}});
 $('#sq').oninput=ssearch;$('#sfmt').onchange=ssearch;$('#sbuild').onclick=buildSixty;$('#sclear').onclick=()=>{ba=new Map();sout=null;renderSixty()};
 
@@ -721,6 +736,7 @@ $('#tool-draft').addEventListener('click',e=>{if(e.target.closest('[data-info]')
   else if(d.lock){const o=dpool.get(decodeURIComponent(d.lock));o.lock=!o.lock;savePool();renderDraft()}
   else{const n=decodeURIComponent(d.rmp),o=dpool.get(n);if(--o.qty<1)dpool.delete(n);savePool();renderDraft()}}
  else if(e.target.dataset.copy!==undefined){navigator.clipboard.writeText(dText(dout)).then(()=>e.target.textContent='Copied',()=>e.target.textContent='Copy failed')}
+ else if(e.target.dataset.chk!==undefined)chkLoad(dText(dout),'40');
  else if(e.target.dataset.dl!==undefined){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([dText(dout)],{type:'text/plain'}));a.download='draft-deck.txt';a.click()}});
 $('#dq').oninput=dsearch;$('#dset').onchange=chooseSet;$('#dset').onkeydown=e=>{if(e.key=='Enter')chooseSet()};
 $('#dimp').onclick=dimport;$('#dbuild').onclick=buildDraft;
@@ -855,6 +871,142 @@ async function importBackup(file){
   homeStatus();$('#bmsg').textContent=done.length?'Restored: '+done.join(', ')+'.':'That backup file was empty.'}
  catch(e){$('#bmsg').textContent="That doesn't look like a backup file from this tool."}}
 $('#pcards').onclick=downloadCards;$('#bexp').onclick=exportBackup;$('#bimp').onclick=()=>$('#bfile').click();$('#bfile').onchange=e=>{const f=e.target.files[0];if(f)importBackup(f);e.target.value=''};
+
+
+// ---------- deck checker ----------
+let chkCards=new Map(),chkData=null,gcSet=null,chkBusy=false;
+const FMTS={commander:'Commander',standard:'Standard',pioneer:'Pioneer',modern:'Modern',legacy:'Legacy',casual60:'60-card (any cards)','40':'40-card (draft)'};
+const FLET={standard:'s',pioneer:'p',modern:'m',legacy:'l'};
+const MLDN=new Set(['Armageddon','Ravages of War','Catastrophe','Devastation','Obliterate','Decree of Annihilation','Jokulhaups','Ruination','Apocalypse','Sunder','Winter Orb','Static Orb','Stasis','Blood Moon','Back to Basics','Rising Waters','Hokori, Dust Drinker','Boom // Bust','Wildfire','Impending Disaster','Tsunami','Acid Rain','Global Ruin','Cataclysm','Armageddon']);
+const MLDR=/destroy (all|each|every) (nonbasic )?lands?\b|each player sacrifices (all|\w+) lands?|(exile|return) all lands|lands? (you control )?(don't|doesn't) untap/;
+const isLandC=c=>/Land/.test(c.t.split(' // ')[0]);
+function parseDeck(t){
+ const main=new Map(),side=new Map(),cmd=[];let sec='main';const add=(m,n,k)=>m.set(n,(m.get(n)||0)+k);
+ t.split(/\r?\n/).forEach(raw=>{let l=raw.trim();if(!l||l.startsWith('//')||l.startsWith('#'))return;
+  const h=l.replace(/[:\s]+$/,'').toLowerCase();
+  if(/^commanders?$/.test(h)){sec='cmd';return}
+  if(/^(deck|main|mainboard|main deck|maindeck)$/.test(h)){sec='main';return}
+  if(/^(sideboard|maybeboard|maybe|considering|companion|tokens?)$/.test(h)){sec='side';return}
+  let target=sec;if(/^sb:\s*/i.test(l)){l=l.replace(/^sb:\s*/i,'');target='side'}
+  const m=l.match(/^(?:(\d+)\s*x?\s+)?(.+)$/);if(!m)return;
+  const k=+m[1]||1;
+  const n=m[2].replace(/\s+\[[^\]]*\]/g,'').replace(/\s+\^[^^]*\^/g,'').replace(/\s+\([A-Za-z0-9]{2,6}\)(\s+[\w★-]+)?(\s+\*\w+\*)?\s*$/,'').replace(/\s+\*\w+\*\s*$/,'').trim();
+  if(!n)return;
+  if(target=='cmd')cmd.push(n);else add(target=='side'?side:main,n,k)});
+ return{main,side,cmd}}
+async function chkLookup(names){
+ const out=new Map(),miss=[];
+ for(let i=0;i<names.length;i+=75){const b=names.slice(i,i+75),data=await post(b.map(n=>({name:n.split(' // ')[0]}))),by={};
+  data.forEach(c=>{const s=slim(c);by[c.name.toLowerCase()]=s;c.name.split(' // ').forEach(x=>by[x.toLowerCase()]=by[x.toLowerCase()]||s)});
+  b.forEach(n=>{const s=by[n.toLowerCase()]||by[n.split(' // ')[0].toLowerCase()];if(s)out.set(n,s);else miss.push(n)});await sleep(120)}
+ return{out,miss}}
+async function loadGC(){
+ if(gcSet)return gcSet;const c=await idb.get('gc');if(c&&c.t>Date.now()-2592e5&&c.n&&c.n.length){gcSet=new Set(c.n);return gcSet}
+ try{let url='https://api.scryfall.com/cards/search?q='+enc('is:gamechanger')+'&unique=cards';const n=[];
+  for(let i=0;i<5&&url;i++){const r=await fetch(url);if(!r.ok)throw 0;const j=await r.json();j.data.forEach(x=>n.push(x.name));url=j.has_more?j.next_page:null;await sleep(110)}
+  if(n.length){gcSet=new Set(n);idb.set('gc',{t:Date.now(),n})}}catch(e){}
+ return gcSet}
+async function runCheck(){
+ if(chkBusy)return;const st=$('#chkMsg'),p=parseDeck($('#chkText').value),cn=$('#chkCmd').value.trim();
+ if(cn&&!p.cmd.some(x=>x.toLowerCase()==cn.toLowerCase())){p.cmd.push(cn);const k=[...p.main.keys()].find(x=>x.toLowerCase()==cn.toLowerCase());if(k){const v=p.main.get(k)-1;v>0?p.main.set(k,v):p.main.delete(k)}}
+ const tot=[...p.main.values()].reduce((a,b)=>a+b,0)+p.cmd.length;
+ if(!tot){st.textContent='Paste a decklist first.';return}
+ let fmt=$('#chkFmt').value;if(fmt=='auto')fmt=(p.cmd.length||(tot>=99&&tot<=101))?'commander':tot<=45?'40':'casual60';
+ chkBusy=true;st.textContent='Looking up cards…';
+ try{
+  const names=[...new Set([...p.main.keys(),...p.side.keys(),...p.cmd])],{out,miss}=await chkLookup(names);
+  const mk=m=>[...m].map(([n,k])=>({c:out.get(n),n:k})).filter(e=>e.c);
+  const ents=new Map();mk(p.main).forEach(e=>{const o=ents.get(e.c.n);if(o)o.n+=e.n;else ents.set(e.c.n,e)});
+  chkCards=new Map([...out.values()].map(c=>[c.n,c]));
+  chkData={fmt,ents:[...ents.values()],side:mk(p.side),cmds:p.cmd.map(n=>out.get(n)).filter(Boolean),miss,gc:null,t:Date.now()};
+  if(fmt=='commander'){st.textContent='Checking the Game Changers list…';chkData.gc=await loadGC()}
+  st.textContent=miss.length?`${miss.length} name${miss.length==1?'':'s'} not recognised: ${miss.slice(0,6).join(', ')}${miss.length>6?'…':''}`:'';
+  renderCheck();$('#chkOut').scrollIntoView({behavior:'smooth'})
+ }catch(e){st.textContent='Could not reach Scryfall. Check your connection and try again.'}
+ finally{chkBusy=false}}
+function produces(c){const o=c.o.toLowerCase(),t=c.t.split(' // ')[0],s=new Set();
+ ['Plains','Island','Swamp','Mountain','Forest'].forEach((b,i)=>{if(t.includes(b))s.add('WUBRG'[i])});
+ (o.match(/add [^.\n]*/g)||[]).forEach(seg=>(seg.match(/\{[wubrg]\}/g)||[]).forEach(x=>s.add(x[1].toUpperCase())));
+ if(/any (one )?colou?r|any type/.test(o))'WUBRG'.split('').forEach(x=>s.add(x));
+ return s}
+function healthChecks(d){
+ const R=[],cnt=f=>d.ents.reduce((a,e)=>a+(f(e.c)?e.n:0),0),fmt=d.fmt,cm=fmt=='commander';
+ const nonL=d.ents.filter(e=>!isLandC(e.c)),nn=nonL.reduce((a,e)=>a+e.n,0),lands=cnt(isLandC);
+ const total=d.ents.reduce((a,e)=>a+e.n,0)+(cm?d.cmds.length:0);
+ const add=(lv,t)=>R.push([lv,t]);
+ // size, copies, legality
+ if(cm){add(total==100?'ok':'bad',`${total} cards${d.cmds.length?` including ${d.cmds.length} commander${d.cmds.length>1?'s':''}`:''} (Commander needs exactly 100).`);
+  if(!d.cmds.length)add('warn','No commander found. Add a "Commander" heading or fill in the commander box to check colour identity.')}
+ else if(fmt=='40')add(total>=40?'ok':'bad',`${total} cards (a limited deck needs at least 40).`);
+ else add(total>=60?'ok':'bad',`${total} cards in the main deck (needs at least 60).`+(total>60?' Exactly 60 is usually best.':''));
+ if(!cm&&d.side.length){const sb=d.side.reduce((a,e)=>a+e.n,0);if(fmt!='40'&&sb>15)add('warn',`Sideboard has ${sb} cards (the limit is 15).`)}
+ const anyN=c=>/any number of cards named|a deck can have any number|up to \w+ cards named/.test(c.o.toLowerCase());
+ if(cm){const dup=d.ents.filter(e=>e.n>1&&!/Basic/.test(e.c.t)&&!anyN(e.c));
+  add(dup.length?'bad':'ok',dup.length?`Not singleton: ${dup.map(e=>e.n+'× '+e.c.n).slice(0,5).join(', ')}.`:'Singleton rule respected.');
+  const bad=[...d.ents.map(e=>e.c),...d.cmds].filter(c=>c.l=='banned'||c.l=='not_legal');
+  add(bad.length?'bad':'ok',bad.length?`Not legal in Commander: ${bad.map(c=>c.n).slice(0,5).join(', ')}.`:'All cards are legal in Commander.');
+  if(d.cmds.length){const ci=new Set(d.cmds.flatMap(c=>c.ci)),off=d.ents.filter(e=>e.c.ci.some(x=>!ci.has(x)));
+   add(off.length?'bad':'ok',off.length?`Outside the commander's colours: ${off.map(e=>e.c.n).slice(0,5).join(', ')}.`:`All cards fit the commander's colour identity (${[...ci].join('')||'colourless'}).`)}}
+ else if(fmt!='40'){const over=d.ents.filter(e=>e.n>4&&!/Basic/.test(e.c.t)&&!anyN(e.c));
+  add(over.length?'bad':'ok',over.length?`More than 4 copies: ${over.map(e=>e.n+'× '+e.c.n).slice(0,5).join(', ')}.`:'No card has more than 4 copies.');
+  if(FLET[fmt]){const il=d.ents.filter(e=>!(e.c.fm||'').includes(FLET[fmt]));add(il.length?'bad':'ok',il.length?`Not legal in ${FMTS[fmt]}: ${il.map(e=>e.c.n).slice(0,5).join(', ')}.`:`All cards are legal in ${FMTS[fmt]}.`)}}
+ // balance
+ const rg=cm?[33,38]:fmt=='40'?[16,18]:[22,26];
+ add(lands>=rg[0]&&lands<=rg[1]?'ok':'warn',`${lands} lands (about ${rg[0]} to ${rg[1]} suits this format).`);
+ const cre=cnt(c=>/Creature/.test(c.t.split(' // ')[0])),role=k=>cnt(c=>!isLandC(c)&&cat(c)==k);
+ if(fmt=='40')add(cre>=13&&cre<=18?'ok':'warn',`${cre} creatures (limited decks usually want 14 to 17).`);
+ else add('info',`${cre} creatures.`);
+ if(cm){[['Ramp',8],['Draw',8],['Removal',5]].forEach(([k,m])=>{const n=role(k);add(n>=m?'ok':'warn',`${n} ${k.toLowerCase()} cards (aim for ${m} or more).`)});add('info',`${role('Wipe')} board wipes.`)}
+ const avg=nn?nonL.reduce((a,e)=>a+e.c.cmc*e.n,0)/nn:0,lim=cm?3.6:fmt=='40'?3.3:3.4;
+ add(avg<=lim?'ok':'warn',`Average mana value ${avg.toFixed(1)} (${avg<=lim?'reasonable':'on the heavy side'}).`);
+ const top=cnt(c=>!isLandC(c)&&c.cmc>=6);if(cm&&top>10)add('warn',`${top} cards cost 6 or more, which can clog your hand.`);
+ // colour sources vs colour requirements (lands only)
+ const pips={W:0,U:0,B:0,R:0,G:0};d.ents.forEach(e=>{if(isLandC(e.c))return;(e.c.mc.match(/\{[^}]+\}/g)||[]).forEach(tk=>{const cols=tk.slice(1,-1).split('/').filter(x=>x.length==1&&'WUBRG'.includes(x));cols.forEach(x=>pips[x]+=e.n/cols.length)})});
+ const tp=Object.values(pips).reduce((a,b)=>a+b,0),src={W:0,U:0,B:0,R:0,G:0};d.ents.forEach(e=>{if(isLandC(e.c))produces(e.c).forEach(x=>src[x]+=e.n)});
+ const mn=cm?7:fmt=='40'?5:6;
+ Object.keys(pips).filter(x=>pips[x]>0).forEach(x=>{const need=Math.max(mn,Math.round(lands*(pips[x]/tp)*.9)),nm={W:'White',U:'Blue',B:'Black',R:'Red',G:'Green'}[x];
+  add(src[x]==0?'bad':src[x]<need?'warn':'ok',`${nm}: ${src[x]} land${src[x]==1?'':'s'} make it, for ${Math.round(pips[x])} coloured symbols (rule of thumb: about ${need}).`)});
+ return{R,total,nn,lands,avg}}
+function bracketInfo(d){
+ if(d.fmt!='commander')return'';
+ if(!d.gc)return`<div class="m">Bracket estimate unavailable: couldn't load the Game Changers list from Scryfall.</div>`;
+ const all=[...d.ents,...d.cmds.map(c=>({c,n:1}))],gcs=all.filter(e=>d.gc.has(e.c.n)),gn=gcs.reduce((a,e)=>a+e.n,0);
+ const mld=all.filter(e=>MLDN.has(e.c.n)||MLDR.test(e.c.o.toLowerCase())),et=all.filter(e=>/\bextra turns?\b/i.test(e.c.o)).reduce((a,e)=>a+e.n,0);
+ const tut=all.filter(e=>!isLandC(e.c)&&/search your library for (a|an|up to \w+) /.test(e.c.o.toLowerCase())&&!/\bland\b|basic|plains|island|swamp|mountain|forest/.test((e.c.o.toLowerCase().match(/search your library for [^.]*/)||[''])[0])).reduce((a,e)=>a+e.n,0);
+ let b=2,why=[];
+ if(gn>0){b=3;why.push(`${gn} Game Changer${gn>1?'s':''} (${gcs.map(e=>e.c.n).slice(0,6).join(', ')}${gcs.length>6?'…':''})`)}
+ if(gn>3){b=4;why.push('more than 3 Game Changers')}
+ if(mld.length){b=4;why.push(`mass land denial (${mld.map(e=>e.c.n).slice(0,3).join(', ')})`)}
+ const nm={2:'Bracket 2 (Core) or lower',3:'Bracket 3 (Upgraded) or higher',4:'Bracket 4 (Optimized) or higher'};
+ return`<div class="brk"><b>Estimated bracket: ${nm[b]}</b><div class="m">${why.length?'Because of '+why.join('; ')+'.':'No Game Changers or mass land denial found.'} Extra-turn cards: ${et}${et>=3?' (chaining them would push a deck up a bracket)':''}. Tutors found: ${tut}.</div><div class="m">This is a floor, not a verdict. Two-card infinite combos can't be detected here, and Bracket 1 against 2, and 4 against 5, depend on how you play, so a table conversation still decides.</div></div>`}
+function renderCheck(){
+ const d=chkData,el=$('#chkOut');if(!d){el.hidden=true;return}
+ const only=$('#chkMiss').checked,own=c=>/Basic/.test(c.t)?Infinity:(qty.get(c.n)||0),unit=c=>(c.p!=null&&c.p!==''?+c.p:0)*fxNow;
+ const rows=[...d.cmds.map(c=>({c,n:1,cmd:true})),...d.ents].map(e=>({...e,own:own(e.c)})).map(e=>({...e,short:Math.max(0,e.n-e.own)}));
+ const nb=rows.filter(e=>!/Basic/.test(e.c.t)),need=nb.reduce((a,e)=>a+e.n,0),have=nb.reduce((a,e)=>a+Math.min(e.n,e.own),0);
+ const miss=rows.filter(e=>e.short>0),cost=miss.reduce((a,e)=>a+e.short*unit(e.c),0),noPrice=miss.filter(e=>!unit(e.c)).length,mcopies=miss.reduce((a,e)=>a+e.short,0);
+ const h=healthChecks(d),ic={ok:'✔',warn:'⚠',bad:'✖',info:'•'},bad=h.R.filter(r=>r[0]=='bad').length,warn=h.R.filter(r=>r[0]=='warn').length;
+ let o=`<h2>${FMTS[d.fmt]} deck: ${d.cmds.length?esc(d.cmds.map(c=>c.n).join(' + ')):h.total+' cards'}</h2>`;
+ o+=`<div class="kpis"><div><b>${have} of ${need}</b><span class="m">non-basic cards you own</span></div><div><b class="${mcopies?'miss':'good'}">${mcopies?gb(cost):'Nothing to buy'}</b><span class="m">${mcopies?`to buy ${mcopies} missing card${mcopies==1?'':'s'}${noPrice?` (${noPrice} unpriced)`:''}`:'you own every card'}</span></div><div><b>${bad?bad+' to fix':warn?warn+' to look at':'Looks solid'}</b><span class="m">deck health</span></div></div>`;
+ o+=`<h4>Deck health</h4><ul class="chk">${h.R.map(([l,t])=>`<li><span class="ic ${l}" aria-hidden="true">${ic[l]}</span><span class="sr">${l}: </span><span>${esc(t)}</span></li>`).join('')}</ul>`+bracketInfo(d);
+ const cur=Array(8).fill(0);d.ents.forEach(e=>{if(!isLandC(e.c))cur[Math.min(7,Math.floor(e.c.cmc))]+=e.n});const mx=Math.max(1,...cur);
+ o+=`<h4>Mana curve</h4><div class="bars">${cur.map((n,i)=>`<div><i style="height:${n/mx*50}px"></i>${i==7?'7+':i}<br>${n}</div>`).join('')}</div>`;
+ o+=`<h4>Cards</h4><div class="tools"><button class="alt" data-chkcopy>Copy shopping list</button></div>`;
+ const g={};rows.filter(e=>!only||e.short>0).forEach(e=>{const k=e.cmd?'Commander':tyOf(e.c);(g[k]=g[k]||[]).push(e)});
+ const lab={Commander:'Commander',Creature:'Creatures',Planeswalker:'Planeswalkers',Instant:'Instants',Sorcery:'Sorceries',Artifact:'Artifacts',Enchantment:'Enchantments',Other:'Other',Land:'Lands'};
+ ['Commander','Creature','Planeswalker','Instant','Sorcery','Artifact','Enchantment','Other','Land'].forEach(k=>{if(!g[k])return;
+  o+=`<h4>${lab[k]} (${g[k].reduce((a,e)=>a+e.n,0)})</h4>`+g[k].sort((a,b)=>a.c.cmc-b.c.cmc||a.c.n.localeCompare(b.c.n)).map(e=>{const full=e.short==0,part=e.short>0&&e.own>0,pr=unit(e.c)*e.short;
+   const st=/Basic/.test(e.c.t)?'':full?'<span class="good" title="You own this">✔</span> ':`<span class="${part?'part':'miss'}">${part?`own ${e.own} of ${e.n} · `:''}${pr?gb(pr):'no price'}</span>${e.c.cm?` <a href="${esc(e.c.cm)}" target="_blank" rel="noopener" style="color:var(--gold)" aria-label="Cardmarket page for ${esc(e.c.n)}">↗</a>`:''} `;
+   return`<div class="row" tabindex="0" data-n="${enc(e.c.n)}"><span class="${full?'':part?'part':'miss'}">${e.n>1?e.n+'× ':''}${esc(e.c.n)}</span><span class="c">${st}${esc(e.c.mc)}<button class="info" data-info="${enc(e.c.n)}" aria-label="Show details for ${esc(e.c.n)}">i</button></span></div>`}).join('')});
+ if(d.side.length&&!only)o+=`<h4>Sideboard / maybeboard (${d.side.reduce((a,e)=>a+e.n,0)})</h4><p class="m">${d.side.map(e=>(e.n>1?e.n+'× ':'')+esc(e.c.n)).join(', ')}</p>`;
+ o+=`<p class="m">Prices are Cardmarket averages converted to pounds, fetched just now. Missing cards are in red, partly owned cards in gold.</p>`;
+ el.innerHTML=o;el.hidden=false;chkData.rows=rows}
+function chkLoad(text,fmt,cmdName){$('#chkText').value=text;$('#chkFmt').value=fmt||'auto';$('#chkCmd').value=cmdName||'';openTool('check');runCheck()}
+$('#chkGo').onclick=runCheck;
+$('#chkClear').onclick=()=>{$('#chkText').value='';$('#chkCmd').value='';chkData=null;$('#chkOut').hidden=true;$('#chkMsg').textContent=''};
+$('#chkMiss').onchange=renderCheck;
+$('#chkOut').addEventListener('click',e=>{if(e.target.dataset.chkcopy!==undefined&&chkData&&chkData.rows){
+ const t=chkData.rows.filter(r=>r.short>0).map(r=>r.short+' '+r.c.n).join('\n');navigator.clipboard.writeText(t).then(()=>e.target.textContent='Copied',()=>e.target.textContent='Copy failed')}});
 
 
 // ---------- wiring ----------
