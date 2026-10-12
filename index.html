@@ -98,30 +98,37 @@ dialog{background:var(--panel);color:var(--tx);border:1px solid var(--line);bord
 <p class="m">Build decks from the cards you own or have just drafted.</p><button class="alt" id="homeBtn" hidden>← Home</button></header>
 <main>
 <div id="home" class="view">
+<section class="panel"><h2>Tools</h2><p class="m" id="hneed"></p>
+<h4>Build a deck</h4><div class="tiles">
+<button class="tile" data-tool="cmd" data-needs disabled>Commander deck builder<br><span class="m">Build a 100-card deck from your collection around a commander.</span></button>
+<button class="tile" data-tool="sixty" data-needs disabled>60-card deck builder<br><span class="m">Build around a few cards from your collection, up to four copies each.</span></button>
+<button class="tile" data-tool="draft">40-card draft builder<br><span class="m">Turn a drafted pool into a deck, built around the cards you pick.</span></button>
+</div>
+<h4>Check and keep your decks</h4><div class="tiles">
+<button class="tile" data-tool="check" data-needs disabled>Deck checker<br><span class="m">Paste a decklist to see what you own, what the rest costs, and how healthy it is.</span></button>
+<button class="tile" data-tool="saved">Saved decks<br><span class="m">Your saved decks in folders. Open one to see what you own and what is still missing.</span></button>
+</div>
+<h4>Explore your collection</h4><div class="tiles">
+<button class="tile" data-tool="search" data-needs disabled>Collection search<br><span class="m">Browse your cards as images, filtered by colour, type, set, rarity and more.</span></button>
+<button class="tile" data-tool="stats" data-needs disabled>Collection stats<br><span class="m">Charts of your colours, rarities, types and sets, plus how complete each set is.</span></button>
+<button class="tile" data-tool="price" data-needs disabled>Price tracker<br><span class="m">Track what your collection and each card is worth over time.</span></button>
+</div>
+</section>
+<section class="panel"><h2>Your collection</h2><div class="m" id="hstat"></div><div class="m" id="hprice"></div>
+<div class="tools"><button class="alt" id="bexp">Export backup</button><button class="alt" id="bimp">Import backup</button><input type="file" id="bfile" accept=".json,application/json" hidden></div><div class="m" id="bmsg" role="status">A backup holds your collection, draft pool and price history in one file. Export one now and then, since browser storage can be cleared.</div></section>
 <section class="panel" id="s1">
-<h2>Import your collection</h2>
+<h2>Import or update your collection</h2>
 <p class="m">Export a CSV from Moxfield, Archidekt, Manabox or Deckbox (it needs a Name column; Count or Quantity is optional). A plain list such as <code>2 Sol Ring</code> also works. Card details come from Scryfall, so you need to be online.</p>
 <input type="file" id="file" accept=".csv,.txt,text/csv,text/plain" aria-label="Collection file">
 <textarea id="paste" placeholder="…or paste your CSV or card list here"></textarea>
 <button id="go">Load collection</button> <button class="alt" id="clear">Clear saved data</button>
 <div id="prog" class="m" role="status"></div>
 </section>
-<section class="panel"><h2>Your collection</h2><div class="m" id="hstat"></div><div class="m" id="hprice"></div>
-<div class="tools"><button class="alt" id="bexp">Export backup</button><button class="alt" id="bimp">Import backup</button><input type="file" id="bfile" accept=".json,application/json" hidden></div><div class="m" id="bmsg" role="status">A backup holds your collection, draft pool and price history in one file. Export one now and then, since browser storage can be cleared.</div></section>
-<section class="panel"><h2>Tools</h2><div class="tiles">
-<button class="tile" data-tool="cmd" data-needs disabled>Commander deck builder<br><span class="m">Build a 100-card deck from your collection around a commander.</span></button>
-<button class="tile" data-tool="draft">40-card draft builder<br><span class="m">Turn a drafted pool into a deck, built around the cards you pick.</span></button>
-<button class="tile" data-tool="check" data-needs disabled>Deck checker<br><span class="m">Paste a decklist to see what you own, what the rest costs, and how healthy it is.</span></button>
-<button class="tile" data-tool="saved">Saved decks<br><span class="m">Your saved decks in folders. Open one to see what you own and what is still missing.</span></button>
-<button class="tile" data-tool="stats" data-needs disabled>Collection stats<br><span class="m">Charts of your colours, rarities, types and sets, plus how complete each set is.</span></button>
-<button class="tile" data-tool="price" data-needs disabled>Price tracker<br><span class="m">Track what your collection and each card is worth over time.</span></button>
-<button class="tile" data-tool="sixty" data-needs disabled>60-card deck builder<br><span class="m">Build around a few cards from your collection, up to four copies each.</span></button>
-</div></section>
-</div>
-<div id="tool-cmd" class="view" hidden>
 
-<section class="panel" id="s5" hidden>
-<h2>Search your collection</h2>
+</div>
+<div id="tool-search" class="view" hidden>
+<section class="panel" id="s5">
+<h2>Collection search</h2>
 <p class="m">Searches card names, types and rules text across everything you own. Try <code>dinosaur</code>, <code>"draw a card"</code>, <code>t:artifact</code>, <code>o:trample</code> or <code>-t:land</code>.</p>
 <input type="search" id="gsearch" placeholder="e.g. dinosaur" aria-label="Search your collection">
 <div class="fbar" id="fbarG"></div>
@@ -129,6 +136,10 @@ dialog{background:var(--panel);color:var(--tx);border:1px solid var(--line);bord
 <div class="m" id="gcount" role="status"></div>
 <div class="list" id="gres"></div>
 </section>
+</div>
+<div id="tool-cmd" class="view" hidden>
+
+
 
 <section class="panel" id="s2" hidden>
 <h2>Choose a commander</h2>
@@ -201,15 +212,17 @@ dialog{background:var(--panel);color:var(--tx);border:1px solid var(--line);bord
 <div id="tool-price" class="view" hidden>
 <section class="panel"><h2>Price tracker</h2><p class="m">Prices are Cardmarket averages from Scryfall, converted from euros to pounds. Foil copies use the foil price. With automatic recording set up, a snapshot is saved every night; without it, the app records one the first time you open it each day.</p>
 <div class="tools"><button id="psnap">Record prices now</button></div><div class="m" id="pstat" role="status"></div></section>
-<section class="panel"><h2>Automatic daily recording</h2><div class="m" id="pauto"></div>
-<p class="m">A free GitHub job can record prices every night, even when you don't open the app. It records your cards plus every card currently legal in Standard, so a card you add from Standard already has history. Cards from outside Standard start when they're added to cards.json. That list holds names only, no quantities or values. See SETUP.md for the steps.</p>
-<div class="tools"><button class="alt" id="pcards">Download cards.json</button></div></section>
+
 <section class="panel"><h2>Filter</h2><p class="m">Narrow everything below to matching cards, for example <code>dinosaur</code> to see what your Dinosaurs are worth. It uses the same search and filters as the other tools.</p>
 <input type="search" id="pfs" placeholder="Search names, types and rules text" aria-label="Filter the price tracker">
 <div class="fbar" id="fbarP"></div><div class="m" id="pfcount" role="status"></div></section>
 <section class="panel"><h2 id="ptitle">Collection value</h2><div class="chips" id="prange"></div><div class="kpis" id="pkpi"></div><div id="pchart"></div><div class="m" id="pcov"></div></section>
+<section class="panel" id="pcontribp"><h2>Where the value comes from</h2><div id="pcontrib"></div></section>
 <section class="cols"><div class="panel"><h2>Biggest movers</h2><div id="pmov"></div></div><div class="panel"><h2>Most valuable cards</h2><div class="list" id="ptop"></div></div></section>
 <section class="panel"><h2>Single card</h2><input type="search" id="pq" placeholder="Search your collection by name" aria-label="Search a card to see its price history"><div class="list" id="pres" style="max-height:200px"></div><div id="pcard"></div></section>
+<section class="panel"><h2>Automatic daily recording</h2><div class="m" id="pauto"></div>
+<p class="m">A free GitHub job can record prices every night, even when you don't open the app. It records your cards plus every card currently legal in Standard, so a card you add from Standard already has history. Cards from outside Standard start when they're added to cards.json. That list holds names only, no quantities or values. See SETUP.md for the steps.</p>
+<div class="tools"><button class="alt" id="pcards">Download cards.json</button></div></section>
 </div>
 <div id="tool-saved" class="view" hidden>
 <section class="panel"><h2>Saved decks</h2><p class="m">Decks are saved in this browser, grouped into folders you choose when saving. Open a deck to check it: cards you don't own show in red with their price. Export a backup from the home page to move your decks to another device.</p>
@@ -646,11 +659,12 @@ function applyColl(d){if(!d||!d.lib||!d.lib.length||d.lib[0].fm===undefined)retu
  ownSet=new Set(lib.map(c=>c.n));RB.cp[1]=Math.min(12,Math.max(1,...qty.values()));flt.r.cp=[1,RB.cp[1]];fillOpts();syncBars();return true}
 async function restore(){applyColl(await idb.get('coll'))}
 const hDatesN=()=>Object.keys(hist.d).length;
-function homeStatus(){const n=lib.length;
+function homeStatus(){const n=lib.length;$('#hneed').textContent=n?'':'Load your collection further down this page to unlock most of these tools. The 40-card draft builder and Saved decks work without it.';
  $('#hstat').innerHTML=n?`<b>${n} unique cards</b> in your saved collection${collT?` (loaded ${new Date(collT).toLocaleDateString()})`:''}. It stays in this browser, so you only need to import again when your collection changes.`+(hDatesN()?` Price history: ${hDatesN()} day${hDatesN()==1?'':'s'}.`:''):'No collection loaded yet. Import one above to unlock the Commander builder.';
  document.querySelectorAll('.tile[data-needs]').forEach(b=>b.disabled=!n)}
-function openTool(t){['home','cmd','draft','sixty','price','check','saved','stats'].forEach(k=>$(k=='home'?'#home':'#tool-'+k).hidden=k!=t);$('#homeBtn').hidden=t=='home';
- if(t=='cmd'){$('#s2').hidden=false;$('#s5').hidden=false;showCmds();renderG()}
+function openTool(t){['home','cmd','draft','sixty','price','check','saved','stats','search'].forEach(k=>$(k=='home'?'#home':'#tool-'+k).hidden=k!=t);$('#homeBtn').hidden=t=='home';
+ if(t=='cmd'){$('#s2').hidden=false;showCmds()}
+ if(t=='search')renderG();
  if(t=='draft')initDraft();if(t=='sixty')ssearch();if(t=='price')renderPrice();if(t=='saved')renderSaved();if(t=='stats')renderStats();scrollTo(0,0)}
 
 // ---------- 40-card draft builder ----------
@@ -870,7 +884,7 @@ const cutoff=()=>{const ds=hDates();if(!ds.length)return'';const k=RNG.find(r=>r
 const chg=(a,b)=>{const d=b-a,p=a?d/a*100:0;return`<span class="${d>=0?'good':'bad'}">${d>=0?'▲':'▼'} ${sg(d)} (${d>=0?'+':'−'}${Math.abs(p).toFixed(1)}%)</span>`};
 const prow=(c,right)=>`<div class="row" tabindex="0" data-pc="${enc(c.n)}" data-n="${enc(c.n)}"><span>${esc(c.n)}${qty.get(c.n)>1?` <span class="m">×${qty.get(c.n)}</span>`:''}</span><span class="c">${right}</span></div>`;
 function renderPrice(){
- const ds=hDates(),el=$('#pchart'),sub=subset(),fon=active(pTerms());
+ $('#pcontrib').innerHTML='';const ds=hDates(),el=$('#pchart'),sub=subset(),fon=active(pTerms());
  $('#pfcount').textContent=fon?`${sub.length} card${sub.length==1?'':'s'} match. Everything below covers just these cards.`:`Showing your whole collection (${lib.length} cards).`;
  $('#ptitle').textContent=fon?'Value of matching cards':'Collection value';
  renderPriceStatus();
@@ -888,7 +902,18 @@ function renderPrice(){
  else $('#pmov').innerHTML='<p class="m">Movers appear once there are two recorded days in the range.</p>';
  const b=stateAt(last.d);
  $('#ptop').innerHTML=sub.map(c=>({c,v:cv(c.n,b.get(c.n))*rt(last.d),u:((b.get(c.n)||[])[0]??(b.get(c.n)||[])[1])*rt(last.d)})).filter(r=>r.v>0).sort((x,y)=>y.v-x.v).slice(0,25).map(r=>prow(r.c,`${gb(r.v)}${qty.get(r.c.n)>1?` <span class="m">(${gb(r.u||0)} each)</span>`:''}`)).join('')||'<p class="m">No priced cards.</p>';
+ {const vals=sub.map(c=>({c,v:cv(c.n,b.get(c.n))*rt(last.d)})).filter(r=>r.v>0);$('#pcontrib').innerHTML=vals.length?contribHtml(vals):'<p class="m">No priced cards to chart.</p>'}
  renderPCard(cut)}
+function groupItems(rows,keyf,order,color,label){const o={};rows.forEach(r=>{const k=keyf(r);o[k]=(o[k]||0)+r.v});const ks=order.filter(k=>k in o).concat(Object.keys(o).filter(k=>!order.includes(k)));return ks.map((k,i)=>({label:label?label(k):k,v:o[k],color:color(k,i)}))}
+function contribHtml(rows){
+ const rord=['common','uncommon','rare','mythic'],rr=rows.map(r=>{const m=metaOf(r.c);return{...r,set:[...m.sets][0]||'Unknown',rar:[...m.rars][0]||r.c.r||'other'}}),tot=rows.reduce((a,r)=>a+r.v,0);
+ const so={};rr.forEach(r=>so[r.set]=(so[r.set]||0)+r.v);const sa=Object.entries(so).sort((a,b)=>b[1]-a[1]),sets=sa.slice(0,7).map(([k,v],i)=>({label:k,v,color:SPAL[i]}));const sr=sa.slice(7).reduce((a,x)=>a+x[1],0);if(sr)sets.push({label:'Other sets ('+(sa.length-7)+')',v:sr,color:SPAL[7]});
+ const top=rows.slice().sort((a,b)=>b.v-a.v),t5=top.slice(0,5).map((r,i)=>({label:r.c.n,v:r.v,color:SPAL[i]})),rest=top.slice(5).reduce((a,r)=>a+r.v,0);if(rest)t5.push({label:'All other cards',v:rest,color:SPAL[7]});
+ const t10=top.slice(0,10).reduce((a,r)=>a+r.v,0);
+ return`<div class="donuts">`+donut('By colour identity',groupItems(rr,r=>colKey(r.c),['W','U','B','R','G','Multicolour','Colourless'],k=>CCOL[k],k=>CNAME[k]||k),'\u00a3')
+  +donut('By rarity',groupItems(rr,r=>rord.includes(r.rar)?r.rar:'other',[...rord,'other'],(k,i)=>SPAL[i],k=>k[0].toUpperCase()+k.slice(1)),'\u00a3')
+  +donut('By card type',groupItems(rr,r=>tyOf(r.c),['Creature','Instant','Sorcery','Artifact','Enchantment','Planeswalker','Land','Other'],(k,i)=>SPAL[i]),'\u00a3')
+  +donut('By set',sets,'\u00a3')+donut('Your five most valuable cards',t5,'\u00a3')+`</div><p class="m">Your ten most valuable cards make up ${Math.round(t10/tot*100)}% of the total. Shares use the latest recorded prices, and follow the filter above.</p>`}
 function renderPCard(cut){
  const n=pr.sel,el=$('#pcard');if(!n){el.innerHTML='<p class="m">Search above, or click any card in the lists, to see its price history.</p>';return}
  cut=cut||cutoff();const c=lib.find(x=>x.n==n);if(!c){el.innerHTML='';return}
@@ -1210,9 +1235,9 @@ function statRows(){
 const colKey=c=>c.ci.length==0?'Colourless':c.ci.length==1?c.ci[0]:'Multicolour';
 function donut(title,items,unit){
  const tot=items.reduce((a,x)=>a+x.v,0);if(!tot)return`<div class="dn"><h4>${title}</h4><p class="m">No data yet.</p></div>`;
- const fmt=v=>unit?String(Math.round(v)):st.by=='value'?gb(v):Math.round(v).toLocaleString('en-GB'),R=60,C=2*Math.PI*R;let off=0;
+ const fmt=v=>unit==='\u00a3'?gb(v):unit?String(Math.round(v)):st.by=='value'?gb(v):Math.round(v).toLocaleString('en-GB'),R=60,C=2*Math.PI*R;let off=0;
  const segs=items.filter(x=>x.v>0).map(x=>{const len=x.v/tot*C,gap=items.filter(y=>y.v>0).length>1?Math.min(2,len*.3):0,s=`<circle r="${R}" cx="80" cy="80" fill="none" stroke="${x.color}" stroke-width="22" stroke-dasharray="${Math.max(0,len-gap).toFixed(2)} ${(C-len+gap).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 80 80)"><title>${esc(x.label)}: ${fmt(x.v)} (${(x.v/tot*100).toFixed(1)}%)</title></circle>`;off+=len;return s}).join('');
- return`<div class="dn"><h4>${title}</h4><svg viewBox="0 0 160 160" width="160" height="160" role="img" aria-label="${esc(title)}: ${items.filter(x=>x.v>0).map(x=>x.label+' '+(x.v/tot*100).toFixed(0)+'%').join(', ')}">${segs}<text x="80" y="78" text-anchor="middle" fill="var(--tx)" font-size="15" font-weight="600">${fmt(tot)}</text><text x="80" y="94" text-anchor="middle" fill="var(--mut)" font-size="10">${unit||(st.by=='value'?'total':st.by)}</text></svg><ul class="lg">${items.filter(x=>x.v>0).map(x=>`<li><i style="background:${x.color}"></i>${esc(x.label)}<b>${fmt(x.v)} <span class="m">${(x.v/tot*100).toFixed(0)}%</span></b></li>`).join('')}</ul></div>`}
+ return`<div class="dn"><h4>${title}</h4><svg viewBox="0 0 160 160" width="160" height="160" role="img" aria-label="${esc(title)}: ${items.filter(x=>x.v>0).map(x=>x.label+' '+(x.v/tot*100).toFixed(0)+'%').join(', ')}">${segs}<text x="80" y="78" text-anchor="middle" fill="var(--tx)" font-size="15" font-weight="600">${fmt(tot)}</text><text x="80" y="94" text-anchor="middle" fill="var(--mut)" font-size="10">${unit==='\u00a3'?'total value':unit||(st.by=='value'?'total':st.by)}</text></svg><ul class="lg">${items.filter(x=>x.v>0).map(x=>`<li><i style="background:${x.color}"></i>${esc(x.label)}<b>${fmt(x.v)} <span class="m">${(x.v/tot*100).toFixed(0)}%</span></b></li>`).join('')}</ul></div>`}
 function renderStats(){
  if(!lib.length)return;const rows=statRows(),m=r=>st.by=='copies'?r.q:st.by=='unique'?1:r.v;
  const copies=rows.reduce((a,r)=>a+r.q,0),val=rows.reduce((a,r)=>a+r.v,0),foils=[...foilN.values()].reduce((a,b)=>a+b,0),sets=new Set(rows.flatMap(r=>r.sets)),top=rows.slice().sort((a,b)=>b.v-a.v)[0];
@@ -1259,7 +1284,7 @@ async function showMissing(code){
   renderSets()}catch(e){box.innerHTML='<span class="m">Could not load that set. Check your connection.</span>'}}
 $('#tool-stats').addEventListener('click',e=>{const d=e.target.dataset||{};
  if(d.by){st.by=d.by;renderStats()}else if(d.ssort){st.sort=d.ssort;renderSets()}else if(d.sall!==undefined){st.all=!st.all;renderSets()}else if(d.smiss)showMissing(d.smiss)
- else if(d.sview){const nm=decodeURIComponent(d.sview);openTool('cmd');Object.keys(RB).forEach(k=>flt.r[k]=[...RB[k]]);flt.types=new Set();flt.cols=new Set();flt.mode='within';flt.set=nm;flt.rar='';$('#gsearch').value='';syncBars();renderG();$('#s5').scrollIntoView({behavior:'smooth'})}
+ else if(d.sview){const nm=decodeURIComponent(d.sview);openTool('search');Object.keys(RB).forEach(k=>flt.r[k]=[...RB[k]]);flt.types=new Set();flt.cols=new Set();flt.mode='within';flt.set=nm;flt.rar='';$('#gsearch').value='';syncBars();renderG();$('#s5').scrollIntoView({behavior:'smooth'})}
  else if(e.target.id=='stmin'){st.min=e.target.checked;renderSets()}});
 
 // ---------- wiring ----------
