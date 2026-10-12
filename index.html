@@ -88,9 +88,9 @@ dialog{background:var(--panel);color:var(--tx);border:1px solid var(--line);bord
 .sc{padding:6px 0;border-bottom:1px solid var(--line)}.sc .tools{margin:4px 0 0}.sc .tools button{padding:3px 9px;font-size:12px}.smiss{margin-top:6px}
 @media(max-width:600px){.hb>span{flex-basis:30%}}
 .gview{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;margin:8px 0}
-.gg{display:grid;grid-template-columns:repeat(var(--gc,4),minmax(0,1fr));gap:8px;height:85vh;min-height:420px;overflow:auto;align-content:start;padding:2px}
-.gc{position:relative;border-radius:10px;overflow:hidden;background:#0f1815;aspect-ratio:488/680;border:1px solid var(--line)}.gc:hover,.gc:focus-visible{border-color:var(--gold)}
-.gc img{width:100%;height:100%;display:block;object-fit:cover}.gnm{display:block;padding:10px;font-size:13px}
+.gg{display:grid;grid-template-columns:repeat(var(--gc,4),minmax(0,1fr));grid-auto-rows:max-content;gap:8px;height:85vh;min-height:420px;overflow:auto;overflow-x:hidden;align-content:start;align-items:start;padding:2px}
+.gc{position:relative;border-radius:5%/3.6%;background:#0f1815;line-height:0;outline-offset:2px}.gc:hover,.gc:focus-visible{outline:2px solid var(--gold)}
+.gc img{width:100%;height:auto;aspect-ratio:488/680;display:block;border-radius:5%/3.6%}.gnm{display:block;padding:10px;font-size:13px;line-height:1.3;aspect-ratio:488/680;border:1px solid var(--line);border-radius:5%/3.6%;box-sizing:border-box}
 .gq{position:absolute;right:6px;bottom:6px;background:#000c;color:#fff;font-size:12px;font-weight:600;border-radius:10px;padding:1px 8px}
 .dnbig .dn{display:grid;grid-template-columns:minmax(240px,420px) minmax(0,1fr);gap:4px 32px;align-items:center}.dnbig .dn h4{grid-column:1/-1;font-size:18px}.dnbig svg{width:100%;height:auto;max-width:420px}.dnbig .lg{font-size:15px}.dnbig .lg li{padding:4px 0}
 @media(max-width:700px){.dnbig .dn{grid-template-columns:1fr}}
@@ -918,14 +918,22 @@ function contribHtml(rows){
  const so={};rr.forEach(r=>so[r.set]=(so[r.set]||0)+r.v);const sa=Object.entries(so).sort((a,b)=>b[1]-a[1]),sets=sa.slice(0,7).map(([k,v],i)=>({label:k,v,color:SPAL[i]}));const sr=sa.slice(7).reduce((a,x)=>a+x[1],0);if(sr)sets.push({label:'Other sets ('+(sa.length-7)+')',v:sr,color:SPAL[7]});
  const top=rows.slice().sort((a,b)=>b.v-a.v),t5=top.slice(0,5).map((r,i)=>({label:r.c.n,v:r.v,color:SPAL[i]})),rest=top.slice(5).reduce((a,r)=>a+r.v,0);if(rest)t5.push({label:'All other cards',v:rest,color:SPAL[7]});
  const t10=top.slice(0,10).reduce((a,r)=>a+r.v,0);
- pcG={colour:['By colour identity',groupItems(rr,r=>colKey(r.c),['W','U','B','R','G','Multicolour','Colourless'],k=>CCOL[k],k=>CNAME[k]||k)],
-  rarity:['By rarity',groupItems(rr,r=>rord.includes(r.rar)?r.rar:'other',[...rord,'other'],(k,i)=>SPAL[i],k=>k[0].toUpperCase()+k.slice(1))],
-  type:['By card type',groupItems(rr,r=>tyOf(r.c),['Creature','Instant','Sorcery','Artifact','Enchantment','Planeswalker','Land','Other'],(k,i)=>SPAL[i])],
-  set:['By set',sets],top:['Five most valuable cards',t5]};
- if(!pcG[pcSel])pcSel='colour';
- return`<label class="m">Show value by <select id="pcsel" aria-label="Break the value down by">${Object.entries(pcG).map(([k,v])=>`<option value="${k}"${k==pcSel?' selected':''}>${v[0].replace(/^By /,'')}</option>`).join('')}</select></label><div class="dnbig" id="pcdn">${donut(pcG[pcSel][0],pcG[pcSel][1],'\u00a3')}</div><p class="m">Your ten most valuable cards make up ${Math.round(t10/tot*100)}% of the total. Shares use the latest recorded prices, and follow the filter above.</p>`}
-let pcG={},pcSel='colour';
-document.addEventListener('change',e=>{if(e.target.id=='pcsel'){pcSel=e.target.value;$('#pcdn').innerHTML=donut(pcG[pcSel][0],pcG[pcSel][1],'\u00a3')}});
+ const av={};rr.forEach(r=>{const o=av[r.set]||(av[r.set]={v:0,n:0});o.v+=r.v;o.n+=qty.get(r.c.n)||1});
+ const avg=Object.entries(av).filter(([,o])=>o.n>=3).map(([k,o])=>({label:k,v:o.v/o.n,n:o.n})).sort((a,b)=>b.v-a.v).slice(0,15);
+ pcG={set:{t:'Value by set',l:'Set',i:sets},
+  avg:{t:'Average price per card, by set',l:'Average price per card, by set',bars:avg},
+  colour:{t:'Value by colour identity',l:'Colour identity',i:groupItems(rr,r=>colKey(r.c),['W','U','B','R','G','Multicolour','Colourless'],k=>CCOL[k],k=>CNAME[k]||k)},
+  rarity:{t:'Value by rarity',l:'Rarity',i:groupItems(rr,r=>rord.includes(r.rar)?r.rar:'other',[...rord,'other'],(k,i)=>SPAL[i],k=>k[0].toUpperCase()+k.slice(1))},
+  type:{t:'Value by card type',l:'Card type',i:groupItems(rr,r=>tyOf(r.c),['Creature','Instant','Sorcery','Artifact','Enchantment','Planeswalker','Land','Other'],(k,i)=>SPAL[i])},
+  top:{t:'Your five most valuable cards',l:'Five most valuable cards',i:t5}};
+ if(!pcG[pcSel])pcSel='set';
+ return`<label class="m">Show <select id="pcsel" aria-label="Choose what to chart">${Object.entries(pcG).map(([k,v])=>`<option value="${k}"${k==pcSel?' selected':''}>${v.l}</option>`).join('')}</select></label><div class="dnbig" id="pcdn">${pcDraw()}</div><p class="m">Your ten most valuable cards make up ${Math.round(t10/tot*100)}% of the total. Shares use the latest recorded prices, and follow the filter above.</p>`}
+function pcDraw(){const g=pcG[pcSel];if(!g)return'';
+ if(g.bars){if(!g.bars.length)return`<h4>${g.t}</h4><p class="m">Not enough cards yet. Sets need at least 3 of your cards.</p>`;const mx=Math.max(...g.bars.map(x=>x.v));
+  return`<h4>${g.t}</h4><div class="avgb">${g.bars.map(x=>`<div class="hb"><span title="${esc(x.label)}">${esc(x.label)}</span><div class="pb"><i style="width:${x.v/mx*100}%"></i></div><b>${gb(x.v)} <span class="m">${x.n} card${x.n==1?'':'s'}</span></b></div>`).join('')}</div><p class="m">Total value of your cards from the set divided by the number of copies you own. Sets with fewer than 3 cards are left out.</p>`}
+ return donut(g.t,g.i,'\u00a3')}
+let pcG={},pcSel='set';
+document.addEventListener('change',e=>{if(e.target.id=='pcsel'){pcSel=e.target.value;$('#pcdn').innerHTML=pcDraw()}});
 function renderPCard(cut){
  const n=pr.sel,el=$('#pcard');if(!n){el.innerHTML='<p class="m">Search above, or click any card in the lists, to see its price history.</p>';return}
  cut=cut||cutoff();const c=lib.find(x=>x.n==n);if(!c){el.innerHTML='';return}
