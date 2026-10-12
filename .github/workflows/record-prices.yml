@@ -1,0 +1,32 @@
+name: Record card prices
+
+on:
+  schedule:
+    # 00:10 UTC every day (00:10 in winter, 01:10 UK summer time).
+    # GitHub can start scheduled runs a little late when it is busy.
+    - cron: '10 0 * * *'
+  workflow_dispatch: # lets you run it by hand from the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:
+  group: record-prices
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Fetch today's prices
+        run: node scripts/record-prices.mjs
+      - name: Save them to the repository
+        run: |
+          git config user.name "price-recorder"
+          git config user.email "actions@users.noreply.github.com"
+          git add data
+          git diff --cached --quiet || git commit -m "Record prices $(date -u +%F)"
+          git push
