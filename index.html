@@ -87,6 +87,11 @@ dialog{background:var(--panel);color:var(--tx);border:1px solid var(--line);bord
 .hb{display:flex;align-items:center;gap:10px;padding:3px 0}.hb>span{flex:0 0 38%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.hb>b{flex:none;font-weight:600;font-size:13px}
 .sc{padding:6px 0;border-bottom:1px solid var(--line)}.sc .tools{margin:4px 0 0}.sc .tools button{padding:3px 9px;font-size:12px}.smiss{margin-top:6px}
 @media(max-width:600px){.hb>span{flex-basis:30%}}
+.gview{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;margin:8px 0}
+.gg{display:grid;grid-template-columns:repeat(var(--gc,4),minmax(0,1fr));gap:8px;height:85vh;min-height:420px;overflow:auto;align-content:start;padding:2px}
+.gc{position:relative;border-radius:10px;overflow:hidden;background:#0f1815;aspect-ratio:488/680;border:1px solid var(--line)}.gc:hover,.gc:focus-visible{border-color:var(--gold)}
+.gc img{width:100%;height:100%;display:block;object-fit:cover}.gnm{display:block;padding:10px;font-size:13px}
+.gq{position:absolute;right:6px;bottom:6px;background:#000c;color:#fff;font-size:12px;font-weight:600;border-radius:10px;padding:1px 8px}
 [hidden]{display:none!important}
 </style></head><body>
 <header><h1>MTG Deck Tools</h1>
@@ -120,6 +125,7 @@ dialog{background:var(--panel);color:var(--tx);border:1px solid var(--line);bord
 <p class="m">Searches card names, types and rules text across everything you own. Try <code>dinosaur</code>, <code>"draw a card"</code>, <code>t:artifact</code>, <code>o:trample</code> or <code>-t:land</code>.</p>
 <input type="search" id="gsearch" placeholder="e.g. dinosaur" aria-label="Search your collection">
 <div class="fbar" id="fbarG"></div>
+<div class="gview"><span class="chips" id="gmode" role="group" aria-label="Result layout"></span><label class="m" id="gcolsbox">Cards per row: <b id="gcolsv">4</b> <input type="range" id="gcols" min="2" max="6" step="1" value="4" aria-label="Cards per row"></label></div>
 <div class="m" id="gcount" role="status"></div>
 <div class="list" id="gres"></div>
 </section>
@@ -584,10 +590,21 @@ document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest
  else if(b.dataset.type){const k=b.dataset.type;flt.types.has(k)?flt.types.delete(k):flt.types.add(k)}
  else if(b.dataset.f=='reset'){Object.keys(RB).forEach(k=>flt.r[k]=[...RB[k]]);flt.types=new Set();flt.cols=new Set();flt.mode='within';flt.set='';flt.rar=''}
  syncBars();refresh()});
+const gv={mode:'cards',cols:4};
+try{Object.assign(gv,JSON.parse(localStorage.getItem('mtg-gview')||'{}'))}catch(e){}
+gv.cols=Math.min(6,Math.max(2,+gv.cols||4));if(gv.mode!='list')gv.mode='cards';
+function gviewUi(){$('#gmode').innerHTML=[['cards','Card images'],['list','Text list']].map(([k,l])=>`<button class="chip wide" data-gmode="${k}" aria-pressed="${gv.mode==k}">${l}</button>`).join('');
+ $('#gcolsbox').hidden=gv.mode!='cards';$('#gcols').value=gv.cols;$('#gcolsv').textContent=gv.cols}
+function gsaveView(){try{localStorage.setItem('mtg-gview',JSON.stringify(gv))}catch(e){}}
 function renderG(){const terms=parseQ($('#gsearch').value),on=active(terms);
- const r=lib.filter(c=>passes(c)&&matches(c,terms)).sort(sorter(flt.sortG));
+ const r=lib.filter(c=>passes(c)&&matches(c,terms)).sort(sorter(flt.sortG)),el=$('#gres'),grid=gv.mode=='cards',cap=grid?240:300;
  $('#gcount').textContent=on?`${r.length} card${r.length==1?'':'s'} match`:`${lib.length} unique cards in your collection. Type or use the filters to search.`;
- $('#gres').innerHTML=on?r.slice(0,300).map(c=>`<div class="row" tabindex="0" data-n="${enc(c.n)}">${rowHtml(c)}<span class="c">${c.mc}<button class="info" data-info="${enc(c.n)}" aria-label="Show details for ${c.n}">i</button></span></div>`).join('')+(r.length>300?'<p class="m">Showing the first 300. Narrow your search to see the rest.</p>':''):''}
+ el.className=grid?'gg':'list';el.style.setProperty('--gc',gv.cols);
+ const tile=c=>{const q=qty.get(c.n)||1;return`<div class="gc" tabindex="0" data-n="${enc(c.n)}">${c.img?`<img loading="lazy" src="${esc(c.img.replace('/small/','/normal/'))}" alt="${esc(c.n)}">`:`<span class="gnm">${esc(c.n)}<br><span class="m">${esc(c.mc)}</span></span>`}${q>1?`<span class="gq">\u00d7${q}</span>`:''}</div>`};
+ el.innerHTML=on?r.slice(0,cap).map(grid?tile:c=>`<div class="row" tabindex="0" data-n="${enc(c.n)}">${rowHtml(c)}<span class="c">${c.mc}<button class="info" data-info="${enc(c.n)}" aria-label="Show details for ${c.n}">i</button></span></div>`).join('')+(r.length>cap?`<p class="m" style="grid-column:1/-1">Showing the first ${cap}. Narrow your search to see the rest.</p>`:''):''}
+document.addEventListener('click',e=>{const m=e.target.dataset&&e.target.dataset.gmode;if(m){gv.mode=m;gsaveView();gviewUi();renderG()}});
+$('#gcols').oninput=e=>{gv.cols=+e.target.value;$('#gcolsv').textContent=gv.cols;gsaveView();$('#gres').style.setProperty('--gc',gv.cols)};
+gviewUi();
 
 // ---------- card preview ----------
 const esc=t=>String(t).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
