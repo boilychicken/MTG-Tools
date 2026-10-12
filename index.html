@@ -135,7 +135,7 @@ dialog{background:var(--panel);color:var(--tx);border:1px solid var(--line);bord
 <p class="m">Searches card names, types and rules text across everything you own. Try <code>dinosaur</code>, <code>"draw a card"</code>, <code>t:artifact</code>, <code>o:trample</code> or <code>-t:land</code>.</p>
 <input type="search" id="gsearch" placeholder="e.g. dinosaur" aria-label="Search your collection">
 <div class="fbar" id="fbarG"></div>
-<div class="gview"><span class="chips" id="gmode" role="group" aria-label="Result layout"></span><label class="m" id="gcolsbox">Cards per row: <b id="gcolsv">4</b> <input type="range" id="gcols" min="2" max="6" step="1" value="4" aria-label="Cards per row"></label></div>
+<div class="gview"><span class="chips" id="gmode" role="group" aria-label="Result layout"></span><label class="m" id="gcolsbox">Cards per row: <b id="gcolsv">4</b> <input type="range" id="gcols" min="1" max="8" step="1" value="4" aria-label="Cards per row"></label></div>
 <div class="m" id="gcount" role="status"></div>
 <div class="list" id="gres"></div>
 </section>
@@ -608,16 +608,16 @@ document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest
  syncBars();refresh()});
 const gv={mode:'cards',cols:4};
 try{Object.assign(gv,JSON.parse(localStorage.getItem('mtg-gview')||'{}'))}catch(e){}
-gv.cols=Math.min(6,Math.max(2,+gv.cols||4));if(gv.mode!='list')gv.mode='cards';
+gv.cols=Math.min(8,Math.max(1,+gv.cols||4));if(gv.mode!='list')gv.mode='cards';
 function gviewUi(){$('#gmode').innerHTML=[['cards','Card images'],['list','Text list']].map(([k,l])=>`<button class="chip wide" data-gmode="${k}" aria-pressed="${gv.mode==k}">${l}</button>`).join('');
  $('#gcolsbox').hidden=gv.mode!='cards';$('#gcols').value=gv.cols;$('#gcolsv').textContent=gv.cols}
 function gsaveView(){try{localStorage.setItem('mtg-gview',JSON.stringify(gv))}catch(e){}}
 function renderG(){const terms=parseQ($('#gsearch').value),on=active(terms);
- const r=lib.filter(c=>passes(c)&&matches(c,terms)).sort(sorter(flt.sortG)),el=$('#gres'),grid=gv.mode=='cards',cap=grid?240:300;
- $('#gcount').textContent=on?`${r.length} card${r.length==1?'':'s'} match`:`${lib.length} unique cards in your collection. Type or use the filters to search.`;
+ const r=lib.filter(c=>passes(c)&&matches(c,terms)).sort(sorter(flt.sortG)),el=$('#gres'),grid=gv.mode=='cards',cap=3000;
+ $('#gcount').textContent=on?`${r.length} card${r.length==1?'':'s'} match`:`All ${lib.length} unique cards in your collection. Type or use the filters to narrow them down.`;
  el.className=grid?'gg':'list';el.style.setProperty('--gc',gv.cols);
  const tile=c=>{const q=qty.get(c.n)||1,im=printImgs(c)[0];return`<div class="gc" tabindex="0" data-n="${enc(c.n)}">${im?`<img loading="lazy" src="${esc(im)}" alt="${esc(c.n)}">`:`<span class="gnm">${esc(c.n)}<br><span class="m">${esc(c.mc)}</span></span>`}${q>1?`<span class="gq">\u00d7${q}</span>`:''}</div>`};
- el.innerHTML=on?r.slice(0,cap).map(grid?tile:c=>`<div class="row" tabindex="0" data-n="${enc(c.n)}">${rowHtml(c)}<span class="c">${c.mc}<button class="info" data-info="${enc(c.n)}" aria-label="Show details for ${c.n}">i</button></span></div>`).join('')+(r.length>cap?`<p class="m" style="grid-column:1/-1">Showing the first ${cap}. Narrow your search to see the rest.</p>`:''):''}
+ el.innerHTML=r.slice(0,cap).map(grid?tile:c=>`<div class="row" tabindex="0" data-n="${enc(c.n)}">${rowHtml(c)}<span class="c">${c.mc}<button class="info" data-info="${enc(c.n)}" aria-label="Show details for ${c.n}">i</button></span></div>`).join('')+(r.length>cap?`<p class="m" style="grid-column:1/-1">Showing the first ${cap}. Narrow your search to see the rest.</p>`:'')}
 document.addEventListener('click',e=>{const m=e.target.dataset&&e.target.dataset.gmode;if(m){gv.mode=m;gsaveView();gviewUi();renderG()}});
 $('#gcols').oninput=e=>{gv.cols=+e.target.value;$('#gcolsv').textContent=gv.cols;gsaveView();$('#gres').style.setProperty('--gc',gv.cols)};
 gviewUi();
