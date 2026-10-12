@@ -52,6 +52,20 @@ for (let i = 0; i < names.length; i += 75) {
   });
   await sleep(150); // stay well inside Scryfall's rate limit
 }
+
+// Scryfall's default printing of a card sometimes has no Cardmarket price (basic lands, some promos and reprints).
+// For those, use the newest paper printing that does have one.
+let fallback = 0;
+for (const n of names.filter(n => !(n in p)).slice(0, 60)) {
+  try {
+    const r = await fetch('https://api.scryfall.com/cards/search?q=' + encodeURIComponent('!"' + n.split(' // ')[0] + '" game:paper') + '&unique=prints&order=released&dir=desc', { headers: H });
+    if (r.ok) {
+      const x = ((await r.json()).data || []).find(c => c.prices && (c.prices.eur != null || c.prices.eur_foil != null));
+      if (x) { p[n] = [x.prices.eur != null ? +x.prices.eur : null, x.prices.eur_foil != null ? +x.prices.eur_foil : null]; fallback++; missing--; }
+    }
+  } catch (e) { /* leave it unpriced */ }
+  await sleep(150);
+}
 if (!Object.keys(p).length) { console.error('No prices came back, so nothing was saved.'); process.exit(1); }
 
 // Also record every card that is currently legal in Standard, so cards you add later already have history.
@@ -88,4 +102,4 @@ let dates = [];
 try { dates = JSON.parse(fs.readFileSync('data/index.json', 'utf8')).dates || []; } catch (e) {}
 dates = [...new Set([...dates, date])].sort();
 fs.writeFileSync('data/index.json', JSON.stringify({ dates }));
-console.log(`Saved ${Object.keys(p).length} prices for ${date}: your cards plus ${std} extra Standard cards (${missing} of your cards had no price). EUR to GBP: ${fx}`);
+console.log(`Saved ${Object.keys(p).length} prices for ${date}: your cards plus ${std} extra Standard cards (${missing} of your cards had no price, ${fallback} priced from another printing). EUR to GBP: ${fx}`);
