@@ -42,7 +42,7 @@ label.row input{margin-right:6px}
 #tip.pin{pointer-events:auto}
 #tip img{width:100%;border-radius:8px}
 #tip .imgs{display:flex;gap:6px}
-#tip.dfc{width:min(340px,92vw)}
+#tip.dfc{width:min(620px,94vw)}
 #tip .imgs img{flex:1;min-width:0;width:50%}
 .fbar{display:grid;gap:8px;margin:10px 0}
 .dual{position:relative;height:26px}
@@ -77,6 +77,16 @@ header{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px}header p{marg
 @media(max-width:800px){.sl{grid-template-columns:1fr}}
 .fbar select{background:#0f1815;color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:6px}
 @media(min-width:801px){.side{position:sticky;top:12px;align-self:start;max-height:calc(100vh - 24px);overflow:auto}}
+.dk{display:flex;flex-wrap:wrap;gap:6px 12px;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}.dk .c{display:flex;flex-wrap:wrap;gap:6px}.dk button{padding:5px 10px;font-size:13px}
+.folder summary{cursor:pointer;color:var(--gold);font-weight:600;padding:6px 0}
+dialog{background:var(--panel);color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:18px;max-width:420px;width:calc(100% - 32px)}dialog::backdrop{background:#000a}dialog input{width:100%;box-sizing:border-box;margin:4px 0 10px}
+.toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--gold);padding:10px 16px;border-radius:8px;z-index:50;max-width:calc(100% - 32px)}
+.donuts{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;margin-top:12px}.dn svg{display:block;margin:6px auto}
+.lg{list-style:none;padding:0;margin:8px 0;font-size:13px}.lg li{display:flex;gap:8px;align-items:center;padding:2px 0}.lg i{width:10px;height:10px;border-radius:2px;flex:none}.lg b{margin-left:auto;font-weight:600}
+.pb{height:8px;background:#0f1815;border-radius:4px;overflow:hidden;flex:1;min-width:60px}.pb i{display:block;height:100%;background:var(--gold);border-radius:4px}
+.hb{display:flex;align-items:center;gap:10px;padding:3px 0}.hb>span{flex:0 0 38%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.hb>b{flex:none;font-weight:600;font-size:13px}
+.sc{padding:6px 0;border-bottom:1px solid var(--line)}.sc>button{padding:3px 9px;font-size:12px;margin-top:4px}.smiss{margin-top:6px}
+@media(max-width:600px){.hb>span{flex-basis:30%}}
 [hidden]{display:none!important}
 </style></head><body>
 <header><h1>MTG Deck Tools</h1>
@@ -97,6 +107,8 @@ header{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px}header p{marg
 <button class="tile" data-tool="cmd" data-needs disabled>Commander deck builder<br><span class="m">Build a 100-card deck from your collection around a commander.</span></button>
 <button class="tile" data-tool="draft">40-card draft builder<br><span class="m">Turn a drafted pool into a deck, built around the cards you pick.</span></button>
 <button class="tile" data-tool="check" data-needs disabled>Deck checker<br><span class="m">Paste a decklist to see what you own, what the rest costs, and how healthy it is.</span></button>
+<button class="tile" data-tool="saved">Saved decks<br><span class="m">Your saved decks in folders. Open one to see what you own and what is still missing.</span></button>
+<button class="tile" data-tool="stats" data-needs disabled>Collection stats<br><span class="m">Charts of your colours, rarities, types and sets, plus how complete each set is.</span></button>
 <button class="tile" data-tool="price" data-needs disabled>Price tracker<br><span class="m">Track what your collection and each card is worth over time.</span></button>
 <button class="tile" data-tool="sixty" data-needs disabled>60-card deck builder<br><span class="m">Build around a few cards from your collection, up to four copies each.</span></button>
 </div></section>
@@ -123,7 +135,7 @@ header{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px}header p{marg
 <h2 id="dtitle"></h2>
 <div class="m" id="dsub"></div>
 <div class="m" id="dstat"></div>
-<div class="tools"><button id="auto">Auto-build deck</button><button class="alt" id="copy">Copy list</button><button class="alt" id="tochk">Check this deck</button><button class="alt" id="dl">Download .txt</button><button class="alt" id="back">Change commander</button></div>
+<div class="tools"><button id="auto">Auto-build deck</button><button class="alt" id="copy">Copy list</button><button class="alt" id="tochk">Check this deck</button><button class="alt" id="tosave">Save deck</button><button class="alt" id="dl">Download .txt</button><button class="alt" id="back">Change commander</button></div>
 <div id="warn" class="bad m"></div>
 <div class="bars" id="curve" aria-label="Mana curve"></div>
 <div class="list" id="deck"></div>
@@ -193,17 +205,28 @@ header{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px}header p{marg
 <section class="cols"><div class="panel"><h2>Biggest movers</h2><div id="pmov"></div></div><div class="panel"><h2>Most valuable cards</h2><div class="list" id="ptop"></div></div></section>
 <section class="panel"><h2>Single card</h2><input type="search" id="pq" placeholder="Search your collection by name" aria-label="Search a card to see its price history"><div class="list" id="pres" style="max-height:200px"></div><div id="pcard"></div></section>
 </div>
+<div id="tool-saved" class="view" hidden>
+<section class="panel"><h2>Saved decks</h2><p class="m">Decks are saved in this browser, grouped into folders you choose when saving. Open a deck to check it: cards you don't own show in red with their price. Export a backup from the home page to move your decks to another device.</p>
+<input type="search" id="dkq" placeholder="Search saved decks" aria-label="Search saved decks"><div id="dklist"></div></section>
+</div>
+<div id="tool-stats" class="view" hidden>
+<section class="panel"><h2>Collection stats</h2><div class="kpis" id="stkpi"></div><div class="chips" id="stby" role="group" aria-label="Measure charts by"></div><div class="donuts" id="stdn"></div></section>
+<section class="panel"><h2>Biggest sets in your collection</h2><div id="stsets"></div></section>
+<section class="panel"><h2>Set completion</h2><div id="stcomp"></div></section>
+</div>
 <div id="tool-check" class="view" hidden>
 <section class="panel"><h2>Deck checker</h2><p class="m">Paste a decklist from Moxfield, Archidekt, ManaBox or plain text. You'll see which cards you own, what the missing ones cost in pounds, and a set of deck health checks. Commander decks also get an estimated Commander Bracket.</p>
 <textarea id="chkText" style="height:220px" placeholder="1 Sol Ring&#10;1 Arcane Signet&#10;...&#10;&#10;Tip: put a Commander heading above your commander, or fill in the commander box below." aria-label="Decklist"></textarea>
 <div class="chips"><select id="chkFmt" aria-label="Format"><option value="auto">Detect format</option><option value="commander">Commander</option><option value="standard">Standard</option><option value="pioneer">Pioneer</option><option value="modern">Modern</option><option value="legacy">Legacy</option><option value="casual60">60-card (any cards)</option><option value="40">40-card (draft)</option></select>
 <input type="text" id="chkCmd" placeholder="Commander (optional)" aria-label="Commander" style="max-width:260px">
-<button id="chkGo">Check deck</button><button class="alt" id="chkClear">Clear</button></div>
+<button id="chkGo">Check deck</button><button class="alt" id="chkSave">Save deck</button><button class="alt" id="chkClear">Clear</button></div>
 <label class="m"><input type="checkbox" id="chkMiss"> Only list cards I'm missing</label>
 <div class="m" id="chkMsg" role="status"></div></section>
 <section class="panel" id="chkOut" hidden></section>
 </div>
 </main>
+<dialog id="saveDlg" aria-labelledby="svTitle"><h2 id="svTitle">Save deck</h2><label class="m" for="svName">Deck name</label><input type="text" id="svName"><label class="m" for="svFolder">Folder (type a new one or pick an existing one)</label><input type="text" id="svFolder" list="svFolders"><datalist id="svFolders"></datalist><p class="m">Saving with the same name in the same folder replaces the older copy.</p><div class="tools"><button id="svOk">Save</button><button class="alt" id="svCancel">Cancel</button></div></dialog>
+<div id="toast" class="toast" role="status" hidden></div>
 <div id="tip" hidden role="tooltip"></div>
 <script>
 const $=s=>document.querySelector(s);
@@ -609,9 +632,9 @@ const hDatesN=()=>Object.keys(hist.d).length;
 function homeStatus(){const n=lib.length;
  $('#hstat').innerHTML=n?`<b>${n} unique cards</b> in your saved collection${collT?` (loaded ${new Date(collT).toLocaleDateString()})`:''}. It stays in this browser, so you only need to import again when your collection changes.`+(hDatesN()?` Price history: ${hDatesN()} day${hDatesN()==1?'':'s'}.`:''):'No collection loaded yet. Import one above to unlock the Commander builder.';
  document.querySelectorAll('.tile[data-needs]').forEach(b=>b.disabled=!n)}
-function openTool(t){['home','cmd','draft','sixty','price','check'].forEach(k=>$(k=='home'?'#home':'#tool-'+k).hidden=k!=t);$('#homeBtn').hidden=t=='home';
+function openTool(t){['home','cmd','draft','sixty','price','check','saved','stats'].forEach(k=>$(k=='home'?'#home':'#tool-'+k).hidden=k!=t);$('#homeBtn').hidden=t=='home';
  if(t=='cmd'){$('#s2').hidden=false;$('#s5').hidden=false;showCmds();renderG()}
- if(t=='draft')initDraft();if(t=='sixty')ssearch();if(t=='price')renderPrice();scrollTo(0,0)}
+ if(t=='draft')initDraft();if(t=='sixty')ssearch();if(t=='price')renderPrice();if(t=='saved')renderSaved();if(t=='stats')renderStats();scrollTo(0,0)}
 
 // ---------- 40-card draft builder ----------
 let dpool=new Map(),dres=[],dout=null;
@@ -623,7 +646,7 @@ function deckHtml(d,title,need,locked){
  const nb=Object.values(d.basics).reduce((a,b)=>a+b,0),cur=Array(7).fill(0);d.spells.forEach(c=>cur[Math.min(6,Math.floor(c.cmc))]++);const mx=Math.max(1,...cur);
  const cre=d.spells.filter(c=>tyOf(c)=='Creature').length,avg=d.spells.length?(d.spells.reduce((a,c)=>a+c.cmc,0)/d.spells.length).toFixed(1):'-';
  const lm=new Map();d.lands.forEach(c=>lm.set(c.n,{c,n:(lm.get(c.n)?lm.get(c.n).n:0)+1}));
- let h=`<h2>${title}: ${[...d.S].join('')||'colourless'}</h2><div class="m">Creatures ${cre} \u00b7 Other spells ${d.spells.length-cre} \u00b7 Lands ${d.lands.length+nb} \u00b7 Avg mana value ${avg}${d.spells.length<need?` \u00b7 Only ${d.spells.length} of ${need} spells could be filled from this pool`:''}</div><div class="tools"><button class="alt" data-copy>Copy list</button><button class="alt" data-chk>Check this deck</button><button class="alt" data-dl>Download .txt</button></div><div class="bars">${cur.map((n,i)=>`<div><i style="height:${n/mx*50}px"></i>${i==6?'6+':i}<br>${n}</div>`).join('')}</div><div class="cols"><div>`;
+ let h=`<h2>${title}: ${[...d.S].join('')||'colourless'}</h2><div class="m">Creatures ${cre} \u00b7 Other spells ${d.spells.length-cre} \u00b7 Lands ${d.lands.length+nb} \u00b7 Avg mana value ${avg}${d.spells.length<need?` \u00b7 Only ${d.spells.length} of ${need} spells could be filled from this pool`:''}</div><div class="tools"><button class="alt" data-copy>Copy list</button><button class="alt" data-chk>Check this deck</button><button class="alt" data-save>Save deck</button><button class="alt" data-dl>Download .txt</button></div><div class="bars">${cur.map((n,i)=>`<div><i style="height:${n/mx*50}px"></i>${i==6?'6+':i}<br>${n}</div>`).join('')}</div><div class="cols"><div>`;
  ['Creature','Planeswalker','Instant','Sorcery','Artifact','Enchantment','Other'].forEach(k=>{if(!g[k])return;h+=`<h4>${k=='Sorcery'?'Sorceries':k+'s'} (${[...g[k].values()].reduce((a,x)=>a+x.n,0)})</h4>`+[...g[k].values()].sort((a,b)=>a.c.cmc-b.c.cmc||a.c.n.localeCompare(b.c.n)).map(x=>`<div class="row" data-n="${enc(x.c.n)}"><span>${x.n>1?x.n+'\u00d7 ':''}${x.c.n}${locked(x.c.n)?' \u2605':''}</span><span class="c">${x.c.mc}</span></div>`).join('')});
  h+=`</div><div><h4>Lands (${d.lands.length+nb})</h4>`+[...lm.values()].map(x=>`<div class="row" data-n="${enc(x.c.n)}"><span>${x.n>1?x.n+'\u00d7 ':''}${x.c.n}</span></div>`).join('')+Object.entries(d.basics).filter(([,n])=>n).map(([b,n])=>`<div class="row"><span>${n}\u00d7 ${b}</span></div>`).join('')+(d.side?`<h4>Sideboard (${d.side.length})</h4><p class="m">${d.side.map(c=>c.n).join(', ')||'None'}</p>`:'')+`</div></div>`;
  return h}
@@ -719,6 +742,7 @@ $('#tool-sixty').addEventListener('click',e=>{if(e.target.closest('[data-info]')
  if(d.sdec||d.sinc||d.srm){const n=dn(d.sdec?'sdec':d.sinc?'sinc':'srm'),o=ba.get(n);if(d.srm||(d.sdec&&o.n<=1))ba.delete(n);else o.n=Math.max(1,Math.min(sMax(o.c),o.n+(d.sinc?1:-1)));renderSixty();return}
  const r=e.target.closest('[data-sadd]');if(r){const c=lib.find(x=>x.n==decodeURIComponent(r.dataset.sadd));if(c&&!ba.has(c.n))ba.set(c.n,{c,n:/Legendary/.test(c.t.split(' // ')[0])?1:sMax(c)});renderSixty();return}
  if(d.copy!==undefined)navigator.clipboard.writeText(dText(sout)).then(()=>e.target.textContent='Copied',()=>e.target.textContent='Copy failed');
+ if(d.save!==undefined)openSave(dText(sout),'casual60','','60-card deck');
  if(d.chk!==undefined)chkLoad(dText(sout),'casual60');
  if(d.dl!==undefined){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([dText(sout)],{type:'text/plain'}));a.download='60-card-deck.txt';a.click()}});
 $('#sq').oninput=ssearch;$('#sfmt').onchange=ssearch;$('#sbuild').onclick=buildSixty;$('#sclear').onclick=()=>{ba=new Map();sout=null;renderSixty()};
@@ -736,6 +760,7 @@ $('#tool-draft').addEventListener('click',e=>{if(e.target.closest('[data-info]')
   else if(d.lock){const o=dpool.get(decodeURIComponent(d.lock));o.lock=!o.lock;savePool();renderDraft()}
   else{const n=decodeURIComponent(d.rmp),o=dpool.get(n);if(--o.qty<1)dpool.delete(n);savePool();renderDraft()}}
  else if(e.target.dataset.copy!==undefined){navigator.clipboard.writeText(dText(dout)).then(()=>e.target.textContent='Copied',()=>e.target.textContent='Copy failed')}
+ else if(e.target.dataset.save!==undefined)openSave(dText(dout),'40','','Draft deck'+(dcode?' - '+dcode:''));
  else if(e.target.dataset.chk!==undefined)chkLoad(dText(dout),'40');
  else if(e.target.dataset.dl!==undefined){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([dText(dout)],{type:'text/plain'}));a.download='draft-deck.txt';a.click()}});
 $('#dq').oninput=dsearch;$('#dset').onchange=chooseSet;$('#dset').onkeydown=e=>{if(e.key=='Enter')chooseSet()};
@@ -860,7 +885,7 @@ $('#pq').oninput=()=>{const q=$('#pq').value.trim(),t=parseQ(q);
 $('#pfs').oninput=renderPrice;
 
 // ---------- backup ----------
-function exportBackup(){const b={v:1,saved:new Date().toISOString(),coll:collPayload(),pool:[...dpool],prices:hist};
+function exportBackup(){const b={v:1,saved:new Date().toISOString(),coll:collPayload(),pool:[...dpool],prices:hist,decks};
  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(b)],{type:'application/json'}));a.download='mtg-tools-backup-'+todayS()+'.json';a.click();
  $('#bmsg').textContent='Backup downloaded. Keep it somewhere safe.'}
 async function importBackup(file){
@@ -868,6 +893,7 @@ async function importBackup(file){
   if(b.coll&&applyColl(b.coll)){await persist();done.push(`${lib.length} cards`)}
   if(Array.isArray(b.pool)&&b.pool.length){dpool=new Map(b.pool);await savePool();done.push('draft pool')}
   if(b.prices&&b.prices.d){const n=Object.keys(b.prices.d).length;hist.fx=hist.fx||{};for(const d in b.prices.d)hist.d[d]=Object.assign(hist.d[d]||{},b.prices.d[d]);Object.assign(hist.fx,b.prices.fx||{});await saveHist();done.push(`${n} days of prices`)}
+  if(Array.isArray(b.decks)&&b.decks.length){const have=new Map(decks.map(d=>[d.id,d]));b.decks.forEach(d=>{const o=have.get(d.id);if(!o||(d.saved||0)>(o.saved||0))have.set(d.id,d)});decks=[...have.values()];await saveDecks();done.push(`${b.decks.length} saved deck${b.decks.length==1?'':'s'}`)}
   homeStatus();$('#bmsg').textContent=done.length?'Restored: '+done.join(', ')+'.':'That backup file was empty.'}
  catch(e){$('#bmsg').textContent="That doesn't look like a backup file from this tool."}}
 $('#pcards').onclick=downloadCards;$('#bexp').onclick=exportBackup;$('#bimp').onclick=()=>$('#bfile').click();$('#bfile').onchange=e=>{const f=e.target.files[0];if(f)importBackup(f);e.target.value=''};
@@ -1000,14 +1026,126 @@ function renderCheck(){
    return`<div class="row" tabindex="0" data-n="${enc(e.c.n)}"><span class="${full?'':part?'part':'miss'}">${e.n>1?e.n+'× ':''}${esc(e.c.n)}</span><span class="c">${st}${esc(e.c.mc)}<button class="info" data-info="${enc(e.c.n)}" aria-label="Show details for ${esc(e.c.n)}">i</button></span></div>`}).join('')});
  if(d.side.length&&!only)o+=`<h4>Sideboard / maybeboard (${d.side.reduce((a,e)=>a+e.n,0)})</h4><p class="m">${d.side.map(e=>(e.n>1?e.n+'× ':'')+esc(e.c.n)).join(', ')}</p>`;
  o+=`<p class="m">Prices are Cardmarket averages converted to pounds, fetched just now. Missing cards are in red, partly owned cards in gold.</p>`;
- el.innerHTML=o;el.hidden=false;chkData.rows=rows}
-function chkLoad(text,fmt,cmdName){$('#chkText').value=text;$('#chkFmt').value=fmt||'auto';$('#chkCmd').value=cmdName||'';openTool('check');runCheck()}
+ el.innerHTML=o;el.hidden=false;chkData.rows=rows;
+ if(chkId){const dk=decks.find(x=>x.id==chkId);if(dk){dk.last={miss:mcopies,cost,t:Date.now()};saveDecks()}}}
+function chkLoad(text,fmt,cmdName,id){chkId=id||null;chkSaveLabel();$('#chkText').value=text;$('#chkFmt').value=fmt||'auto';$('#chkCmd').value=cmdName||'';openTool('check');runCheck()}
 $('#chkGo').onclick=runCheck;
-$('#chkClear').onclick=()=>{$('#chkText').value='';$('#chkCmd').value='';chkData=null;$('#chkOut').hidden=true;$('#chkMsg').textContent=''};
+$('#chkClear').onclick=()=>{chkId=null;chkSaveLabel();$('#chkText').value='';$('#chkCmd').value='';chkData=null;$('#chkOut').hidden=true;$('#chkMsg').textContent=''};
 $('#chkMiss').onchange=renderCheck;
 $('#chkOut').addEventListener('click',e=>{if(e.target.dataset.chkcopy!==undefined&&chkData&&chkData.rows){
  const t=chkData.rows.filter(r=>r.short>0).map(r=>r.short+' '+r.c.n).join('\n');navigator.clipboard.writeText(t).then(()=>e.target.textContent='Copied',()=>e.target.textContent='Copy failed')}});
 
+
+// ---------- saved decks ----------
+let decks=[],chkId=null,saveCtx=null,delArm=null,tt=0;
+const saveDecks=()=>idb.set('decks',decks);
+const FOLDER_DEF={commander:'Commander','40':'Draft',casual60:'60-card'};
+function toast(t){const e=$('#toast');e.textContent=t;e.hidden=false;clearTimeout(tt);tt=setTimeout(()=>e.hidden=true,2600)}
+function withCmd(text,cn){if(!cn||/^\s*commanders?\s*:?\s*$/im.test(text))return text;
+ const re=new RegExp('^\\s*(\\d+\\s*x?\\s+)?'+cn.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\s*$','i'),ls=text.split(/\r?\n/),i=ls.findIndex(l=>re.test(l));
+ if(i>=0)ls.splice(i,1);return'Commander\n1 '+cn+'\n\nDeck\n'+ls.join('\n').replace(/^\s+/,'')}
+function openSave(text,fmt,cn,defName,id){
+ const ex=id&&decks.find(d=>d.id==id);
+ saveCtx={text:withCmd(text,cn),fmt,cmd:cn||'',id:ex?ex.id:null};
+ $('#svName').value=ex?ex.name:defName||'My deck';$('#svFolder').value=ex?ex.folder:FOLDER_DEF[fmt]||'Decks';
+ $('#svTitle').textContent=ex?'Update saved deck':'Save deck';
+ $('#svFolders').innerHTML=[...new Set(decks.map(d=>d.folder))].sort().map(f=>`<option value="${esc(f)}">`).join('');
+ const dlg=$('#saveDlg');dlg.showModal?dlg.showModal():dlg.setAttribute('open','');$('#svName').focus()}
+function openEdit(id){const d=decks.find(x=>x.id==id);if(!d)return;openSave(d.text,d.fmt,'',d.name,id);saveCtx.text=d.text;saveCtx.cmd=d.cmd}
+function confirmSave(){
+ if(!saveCtx)return;const name=$('#svName').value.trim()||'My deck',folder=$('#svFolder').value.trim()||'Decks',c=saveCtx;
+ const dup=!c.id&&decks.find(d=>d.name.toLowerCase()==name.toLowerCase()&&d.folder.toLowerCase()==folder.toLowerCase()),id=c.id||(dup&&dup.id)||Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+ const old=decks.find(d=>d.id==id),rec={id,name,folder,fmt:c.fmt,cmd:c.cmd,text:c.text,n:deckCount(c.text),saved:Date.now(),last:old&&old.text==c.text?old.last:null};
+ decks=decks.filter(d=>d.id!=id);decks.push(rec);saveDecks();
+ const dlg=$('#saveDlg');dlg.close?dlg.close():dlg.removeAttribute('open');saveCtx=null;
+ toast((dup?'Replaced ':c.id?'Updated ':'Saved ')+'"'+name+'" in '+folder+'.');
+ if(!$('#tool-saved').hidden)renderSaved();chkSaveLabel()}
+function deckCount(text){const p=parseDeck(text);return[...p.main.values()].reduce((a,b)=>a+b,0)+p.cmd.length}
+function chkSaveLabel(){const b=$('#chkSave');if(b)b.textContent=chkId&&decks.some(d=>d.id==chkId)?'Update saved deck':'Save deck'}
+function renderSaved(){
+ const q=$('#dkq').value.trim().toLowerCase(),L=decks.filter(d=>!q||(d.name+' '+d.folder+' '+d.cmd).toLowerCase().includes(q)),el=$('#dklist');
+ if(!decks.length){el.innerHTML='<p class="m">Nothing saved yet. Press "Save deck" in any builder, or paste a list into the Deck checker and save it from there.</p>';return}
+ if(!L.length){el.innerHTML='<p class="m">No saved decks match that search.</p>';return}
+ const g={};L.forEach(d=>(g[d.folder]=g[d.folder]||[]).push(d));
+ el.innerHTML=Object.keys(g).sort((a,b)=>a.localeCompare(b)).map(f=>`<details class="folder" open><summary>${esc(f)} (${g[f].length})</summary>`+g[f].sort((a,b)=>b.saved-a.saved).map(d=>{
+  const ls=d.last?`<br><span class="${d.last.miss?'miss':'good'}">${d.last.miss?`Missing ${d.last.miss} card${d.last.miss==1?'':'s'} · about ${gb(d.last.cost)}`:'You own every card'}</span> <span class="m">(checked ${new Date(d.last.t).toLocaleDateString('en-GB')})</span>`:'';
+  return`<div class="dk"><span><b>${esc(d.name)}</b><br><span class="m">${esc(FMTS[d.fmt]||d.fmt)} · ${d.n} cards · saved ${new Date(d.saved).toLocaleDateString('en-GB')}${d.cmd?' · '+esc(d.cmd):''}</span>${ls}</span><span class="c"><button data-dopen="${d.id}">Open and check</button><button class="alt" data-dedit="${d.id}">Rename or move</button><button class="alt" data-dcopy="${d.id}">Copy list</button><button class="alt" data-ddel="${d.id}">${delArm==d.id?'Really delete?':'Delete'}</button></span></div>`}).join('')+'</details>').join('')}
+$('#tool-saved').addEventListener('click',e=>{const d=e.target.dataset||{};
+ if(d.dopen){const k=decks.find(x=>x.id==d.dopen);if(k)chkLoad(k.text,k.fmt,'',k.id)}
+ else if(d.dedit)openEdit(d.dedit);
+ else if(d.dcopy){const k=decks.find(x=>x.id==d.dcopy);if(k)navigator.clipboard.writeText(k.text).then(()=>toast('List copied.'),()=>toast('Copy failed.'))}
+ else if(d.ddel){if(delArm==d.ddel){decks=decks.filter(x=>x.id!=d.ddel);saveDecks();delArm=null;toast('Deleted.')}else{delArm=d.ddel;setTimeout(()=>{if(delArm==d.ddel){delArm=null;renderSaved()}},4000)}renderSaved()}});
+$('#dkq').oninput=renderSaved;$('#svOk').onclick=confirmSave;$('#svCancel').onclick=()=>{const dlg=$('#saveDlg');dlg.close?dlg.close():dlg.removeAttribute('open');saveCtx=null};
+$('#svName').onkeydown=$('#svFolder').onkeydown=e=>{if(e.key=='Enter')confirmSave()};
+$('#tosave').onclick=()=>cmd&&openSave(listText(),'commander',cmd.n,cmd.n);
+$('#chkSave').onclick=()=>{const t=$('#chkText').value;if(!t.trim()){$('#chkMsg').textContent='Paste a decklist first.';return}
+ const p=parseDeck(t);let fmt=$('#chkFmt').value;if(fmt=='auto'){const tot=[...p.main.values()].reduce((a,b)=>a+b,0)+p.cmd.length;fmt=(p.cmd.length||$('#chkCmd').value.trim()||(tot>=99&&tot<=101))?'commander':tot<=45?'40':'casual60'}
+ const cn=p.cmd[0]||$('#chkCmd').value.trim();openSave(t,fmt,cn,cn||'Imported deck',chkId)};
+(async()=>{const d=await idb.get('decks');if(Array.isArray(d))decks=d})();
+
+// ---------- collection stats ----------
+const st={by:'copies',sort:'pct',min:true,all:false};
+const SPAL=['#3987e5','#d95926','#199e70','#c98500','#d55181','#008300','#9085e9','#8a8f98'];
+const CCOL={W:'#e8e0b8',U:'#5aa0d9',B:'#8a7f88',R:'#d96a52',G:'#4f9c62',Multicolour:'#e0b552',Colourless:'#b9b9b9'};
+const CNAME={W:'White',U:'Blue',B:'Black',R:'Red',G:'Green'};
+let setInfo=null,setOpen=new Map();
+async function loadSetInfo(){
+ if(setInfo)return setInfo;const c=await idb.get('setinfo');if(c&&c.t>Date.now()-6048e5&&c.d){setInfo=c.d;return setInfo}
+ try{const j=await(await fetch('https://api.scryfall.com/sets')).json(),d={};
+  j.data.forEach(x=>{d[x.name.toLowerCase()]={code:x.code.toUpperCase(),n:x.printed_size||x.card_count,date:x.released_at||'',dig:!!x.digital}});
+  if(Object.keys(d).length){setInfo=d;idb.set('setinfo',{t:Date.now(),d});return d}}catch(e){}
+ return null}
+async function getSetCards(code){
+ let cs=await idb.get('set:'+code);
+ if(!cs){cs=[];let url='https://api.scryfall.com/cards/search?unique=cards&order=name&q='+enc('e:'+code+' -t:basic');
+  for(let i=0;i<8&&url;i++){const r=await fetch(url);if(!r.ok)break;const j=await r.json();cs.push(...j.data.map(slim));url=j.has_more?j.next_page:null;await sleep(110)}
+  if(cs.length)idb.set('set:'+code,cs)}
+ return cs}
+function statRows(){
+ const ds=hDates(),last=ds.length?stateAt(ds[ds.length-1]):new Map();
+ return lib.map(c=>{const q=qty.get(c.n)||1,pe=last.get(c.n),v=pe?cv(c.n,pe)*fxNow:(c.p!=null&&c.p!==''?+c.p*q*fxNow:0),m=metaOf(c);
+  return{c,q,v,sets:[...m.sets],rar:[...m.rars][0]||c.r||'other'}})}
+const colKey=c=>c.ci.length==0?'Colourless':c.ci.length==1?c.ci[0]:'Multicolour';
+function donut(title,items){
+ const tot=items.reduce((a,x)=>a+x.v,0);if(!tot)return`<div class="dn"><h4>${title}</h4><p class="m">No data yet.</p></div>`;
+ const fmt=v=>st.by=='value'?gb(v):Math.round(v).toLocaleString('en-GB'),R=60,C=2*Math.PI*R;let off=0;
+ const segs=items.filter(x=>x.v>0).map(x=>{const len=x.v/tot*C,gap=items.filter(y=>y.v>0).length>1?Math.min(2,len*.3):0,s=`<circle r="${R}" cx="80" cy="80" fill="none" stroke="${x.color}" stroke-width="22" stroke-dasharray="${Math.max(0,len-gap).toFixed(2)} ${(C-len+gap).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 80 80)"><title>${esc(x.label)}: ${fmt(x.v)} (${(x.v/tot*100).toFixed(1)}%)</title></circle>`;off+=len;return s}).join('');
+ return`<div class="dn"><h4>${title}</h4><svg viewBox="0 0 160 160" width="160" height="160" role="img" aria-label="${esc(title)}: ${items.filter(x=>x.v>0).map(x=>x.label+' '+(x.v/tot*100).toFixed(0)+'%').join(', ')}">${segs}<text x="80" y="78" text-anchor="middle" fill="var(--tx)" font-size="15" font-weight="600">${fmt(tot)}</text><text x="80" y="94" text-anchor="middle" fill="var(--mut)" font-size="10">${st.by=='value'?'total':st.by}</text></svg><ul class="lg">${items.filter(x=>x.v>0).map(x=>`<li><i style="background:${x.color}"></i>${esc(x.label)}<b>${fmt(x.v)} <span class="m">${(x.v/tot*100).toFixed(0)}%</span></b></li>`).join('')}</ul></div>`}
+function renderStats(){
+ if(!lib.length)return;const rows=statRows(),m=r=>st.by=='copies'?r.q:st.by=='unique'?1:r.v;
+ const copies=rows.reduce((a,r)=>a+r.q,0),val=rows.reduce((a,r)=>a+r.v,0),foils=[...foilN.values()].reduce((a,b)=>a+b,0),sets=new Set(rows.flatMap(r=>r.sets)),top=rows.slice().sort((a,b)=>b.v-a.v)[0];
+ $('#stkpi').innerHTML=`<div><b>${lib.length.toLocaleString('en-GB')}</b><span class="m">unique cards</span></div><div><b>${copies.toLocaleString('en-GB')}</b><span class="m">total copies</span></div><div><b>${gb(val)}</b><span class="m">estimated value</span></div><div><b>${foils}</b><span class="m">foil copies</span></div><div><b>${sets.size}</b><span class="m">different sets</span></div>`+(top&&top.v?`<div><b>${esc(top.c.n)}</b><span class="m">most valuable · ${gb(top.v)}</span></div>`:'');
+ $('#stby').innerHTML=[['copies','Copies'],['unique','Unique cards'],['value','Value (£)']].map(([k,l])=>`<button class="chip wide" data-by="${k}" aria-pressed="${st.by==k}">${l}</button>`).join('');
+ const sum=(keyf,order,color,label)=>{const o={};rows.forEach(r=>{const k=keyf(r);o[k]=(o[k]||0)+m(r)});const ks=order.filter(k=>k in o).concat(Object.keys(o).filter(k=>!order.includes(k)));return ks.map((k,i)=>({label:label?label(k):k,v:o[k],color:color(k,i)}))};
+ const cname=k=>CNAME[k]||k,rord=['common','uncommon','rare','mythic'],ty=r=>tyOf(r.c);
+ $('#stdn').innerHTML=donut('By colour identity',sum(r=>colKey(r.c),['W','U','B','R','G','Multicolour','Colourless'],k=>CCOL[k],cname))
+  +donut('By rarity',sum(r=>rord.includes(r.rar)?r.rar:'other',[...rord,'other'],(k,i)=>SPAL[i],k=>k[0].toUpperCase()+k.slice(1)))
+  +donut('By card type',sum(ty,['Creature','Instant','Sorcery','Artifact','Enchantment','Planeswalker','Land','Other'],(k,i)=>SPAL[i]));
+ const so={};rows.forEach(r=>{const k=r.sets[0]||'Unknown';so[k]=(so[k]||0)+m(r)});
+ const arr=Object.entries(so).sort((a,b)=>b[1]-a[1]),top10=arr.slice(0,10),rest=arr.slice(10).reduce((a,x)=>a+x[1],0),mx=Math.max(1,...top10.map(x=>x[1])),fmt=v=>st.by=='value'?gb(v):Math.round(v).toLocaleString('en-GB');
+ $('#stsets').innerHTML=top10.map(([k,v])=>`<div class="hb"><span>${esc(k)}</span><div class="pb"><i style="width:${v/mx*100}%"></i></div><b>${fmt(v)}</b></div>`).join('')+(rest?`<p class="m">Plus ${arr.length-10} other sets: ${fmt(rest)}.</p>`:'');
+ renderSets()}
+async function renderSets(){
+ const el=$('#stcomp');el.innerHTML='<p class="m">Loading set information…</p>';
+ const info=await loadSetInfo();if(!info){el.innerHTML="<p class='m'>Couldn't load set sizes from Scryfall. Check your connection and reopen this page.</p>";return}
+ const o=new Map();statRows().forEach(r=>r.sets.forEach(s=>o.set(s,(o.get(s)||0)+1)));
+ let L=[],unk=[];o.forEach((n,name)=>{const i=info[name.toLowerCase()];if(!i||i.dig||!i.n){unk.push(name);return}L.push({name,code:i.code,own:n,size:Math.max(i.n,n),date:i.date})});
+ L.forEach(x=>x.pct=x.own/x.size);const hid=st.min?L.filter(x=>x.own<5).length:0;if(st.min)L=L.filter(x=>x.own>=5);
+ L.sort(st.sort=='pct'?(a,b)=>b.pct-a.pct||b.own-a.own:st.sort=='own'?(a,b)=>b.own-a.own:(a,b)=>b.date.localeCompare(a.date));
+ const shown=st.all?L:L.slice(0,25);
+ el.innerHTML=`<div class="chips">${[['pct','Most complete'],['own','Most owned'],['new','Newest']].map(([k,l])=>`<button class="chip wide" data-ssort="${k}" aria-pressed="${st.sort==k}">${l}</button>`).join('')}<label class="m"><input type="checkbox" id="stmin" ${st.min?'checked':''}> Hide sets where I own fewer than 5 cards${hid?` (${hid} hidden)`:''}</label></div>`
+  +(shown.length?shown.map(x=>`<div class="sc"><div class="hb"><span>${esc(x.name)} <span class="m">${x.code}</span></span><div class="pb" role="progressbar" aria-valuenow="${Math.round(x.pct*100)}" aria-valuemin="0" aria-valuemax="100" aria-label="${esc(x.name)} completion"><i style="width:${x.pct*100}%"></i></div><b>${x.own} / ${x.size} <span class="m">${Math.round(x.pct*100)}%</span></b></div><button class="alt" data-smiss="${x.code}">${setOpen.has(x.code)?'Hide missing cards':"See what's missing"}</button><div id="sm-${x.code}" class="smiss">${setOpen.get(x.code)||''}</div></div>`).join(''):'<p class="m">No sets to show yet.</p>')
+  +(L.length>25?`<div class="tools"><button class="alt" data-sall>${st.all?'Show fewer':'Show all '+L.length+' sets'}</button></div>`:'')
+  +`<p class="m">Counts are unique card names you own from each set, out of the number of cards printed in the set. Bonus cards, promos and alternate art can make the totals slightly different from a full collector's count.${unk.length?` ${unk.length} set name${unk.length==1?'':'s'} from your file couldn't be matched (promos, tokens or special products).`:''}</p>`}
+async function showMissing(code){
+ const box=$('#sm-'+code);if(!box)return;if(setOpen.has(code)){setOpen.delete(code);renderSets();return}
+ box.innerHTML='<span class="m">Loading cards…</span>';
+ try{const cs=await getSetCards(code);if(!cs.length)throw 0;const miss=cs.filter(c=>!ownSet.has(c.n)).sort((a,b)=>(+b.p||0)-(+a.p||0)),cost=miss.reduce((a,c)=>a+(+c.p||0)*fxNow,0);
+  setOpen.set(code,miss.length?`<p class="m">${miss.length} of ${cs.length} cards missing, about <b>${gb(cost)}</b> to buy them all at Cardmarket averages. Most expensive first.</p>`+miss.slice(0,40).map(c=>`<div class="row" data-n="${enc(c.n)}"><span class="miss">${esc(c.n)}<br><span class="m">${esc(c.r)}</span></span><span class="c"><span class="miss">${c.p?gb(+c.p*fxNow):'no price'}</span><button class="info" data-info="${enc(c.n)}" aria-label="Show details for ${esc(c.n)}">i</button></span></div>`).join('')+(miss.length>40?`<p class="m">…and ${miss.length-40} more.</p>`:''):'<p class="good">You own every card in this set.</p>');
+  renderSets()}catch(e){box.innerHTML='<span class="m">Could not load that set. Check your connection.</span>'}}
+$('#tool-stats').addEventListener('click',e=>{const d=e.target.dataset||{};
+ if(d.by){st.by=d.by;renderStats()}else if(d.ssort){st.sort=d.ssort;renderSets()}else if(d.sall!==undefined){st.all=!st.all;renderSets()}else if(d.smiss)showMissing(d.smiss)
+ else if(e.target.id=='stmin'){st.min=e.target.checked;renderSets()}});
 
 // ---------- wiring ----------
 $('#file').onchange=e=>{const f=e.target.files[0];if(f)f.text().then(t=>{$('#paste').value=t;msg(`Read ${f.name}. Click Load collection.`)})};
