@@ -67,6 +67,7 @@ label.row input{margin-right:6px}
 .tile:not(:disabled):hover{border-color:var(--gold)}.tile:disabled{opacity:.45;cursor:not-allowed}
 .star[aria-pressed=true]{color:var(--gold);border-color:var(--gold)}
 header{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px}header p{margin:0}header .alt{margin-left:auto}
+.kpis{display:flex;flex-wrap:wrap;gap:8px 32px;margin:12px 0}.kpis b{font-size:22px;display:block;font-weight:600}.good{color:#7bc47f}.chart{width:100%;height:auto;display:block}
 .fdet summary{cursor:pointer;color:var(--gold);margin-bottom:6px}
 .fin{display:grid;gap:10px}
 .sl{display:grid;grid-template-columns:1fr 1fr;gap:6px 18px}
@@ -87,11 +88,12 @@ header{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px}header p{marg
 <button id="go">Load collection</button> <button class="alt" id="clear">Clear saved data</button>
 <div id="prog" class="m" role="status"></div>
 </section>
-<section class="panel"><h2>Your collection</h2><div class="m" id="hstat"></div></section>
+<section class="panel"><h2>Your collection</h2><div class="m" id="hstat"></div><div class="m" id="hprice"></div>
+<div class="tools"><button class="alt" id="bexp">Export backup</button><button class="alt" id="bimp">Import backup</button><input type="file" id="bfile" accept=".json,application/json" hidden></div><div class="m" id="bmsg" role="status">A backup holds your collection, draft pool and price history in one file. Export one now and then, since browser storage can be cleared.</div></section>
 <section class="panel"><h2>Tools</h2><div class="tiles">
 <button class="tile" data-tool="cmd" data-needs disabled>Commander deck builder<br><span class="m">Build a 100-card deck from your collection around a commander.</span></button>
 <button class="tile" data-tool="draft">40-card draft builder<br><span class="m">Turn a drafted pool into a deck, built around the cards you pick.</span></button>
-<button class="tile" disabled>Price tracker<br><span class="m">Coming soon</span></button>
+<button class="tile" data-tool="price" data-needs disabled>Price tracker<br><span class="m">Track what your collection and each card is worth over time.</span></button>
 <button class="tile" data-tool="sixty" data-needs disabled>60-card deck builder<br><span class="m">Build around a few cards from your collection, up to four copies each.</span></button>
 </div></section>
 </div>
@@ -174,6 +176,16 @@ header{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px}header p{marg
 </section>
 <section class="panel" id="sout" hidden></section>
 </div>
+<div id="tool-price" class="view" hidden>
+<section class="panel"><h2>Price tracker</h2><p class="m">Prices are Cardmarket averages from Scryfall, converted from euros to pounds. Foil copies use the foil price. With automatic recording set up, a snapshot is saved every night; without it, the app records one the first time you open it each day.</p>
+<div class="tools"><button id="psnap">Record prices now</button></div><div class="m" id="pstat" role="status"></div></section>
+<section class="panel"><h2>Automatic daily recording</h2><div class="m" id="pauto"></div>
+<p class="m">A free GitHub job can record prices every night, even when you don't open the app. It records your cards plus every card currently legal in Standard, so a card you add from Standard already has history. Cards from outside Standard start when they're added to cards.json. That list holds names only, no quantities or values. See SETUP.md for the steps.</p>
+<div class="tools"><button class="alt" id="pcards">Download cards.json</button></div></section>
+<section class="panel"><h2>Collection value</h2><div class="chips" id="prange"></div><div class="kpis" id="pkpi"></div><div id="pchart"></div><div class="m" id="pcov"></div></section>
+<section class="cols"><div class="panel"><h2>Biggest movers</h2><div id="pmov"></div></div><div class="panel"><h2>Most valuable cards</h2><div class="list" id="ptop"></div></div></section>
+<section class="panel"><h2>Single card</h2><input type="search" id="pq" placeholder="Search your collection by name" aria-label="Search a card to see its price history"><div class="list" id="pres" style="max-height:200px"></div><div id="pcard"></div></section>
+</div>
 </main>
 <div id="tip" hidden role="tooltip"></div>
 <script>
@@ -195,12 +207,12 @@ function parseCSV(t){const rows=[];let r=[],f='',q=false;
   else f+=c}
  if(f||r.length){r.push(f);rows.push(r)}return rows.filter(r=>r.some(x=>x.trim()))}
 function importText(t){
- const m=new Map(),rows=parseCSV(t);ids=new Map();metaRaw=new Map();
+ const m=new Map(),rows=parseCSV(t);ids=new Map();metaRaw=new Map();foilQ=new Map();
  const h=(rows[0]||[]).map(x=>x.trim().toLowerCase());
  const ni=h.findIndex(x=>['name','card name','card'].includes(x));
  if(ni>=0){
-  const qi=h.findIndex(x=>['count','quantity','qty','amount'].includes(x)),ii=h.findIndex(x=>x=='scryfall id'||x=='scryfall_id'),si0=h.findIndex(x=>['set name','edition name'].includes(x)),si=si0>=0?si0:h.findIndex(x=>['set code','edition','set'].includes(x)),ri=h.findIndex(x=>x=='rarity');
-  rows.slice(1).forEach(r=>{const n=(r[ni]||'').trim();if(n){m.set(n,(m.get(n)||0)+(qi>=0?parseInt(r[qi])||1:1));if(ii>=0&&/^[0-9a-f-]{36}$/i.test((r[ii]||'').trim())&&!ids.has(n))ids.set(n,r[ii].trim());addMeta(n,r[si],r[ri])}});
+  const qi=h.findIndex(x=>['count','quantity','qty','amount'].includes(x)),ii=h.findIndex(x=>x=='scryfall id'||x=='scryfall_id'),si0=h.findIndex(x=>['set name','edition name'].includes(x)),si=si0>=0?si0:h.findIndex(x=>['set code','edition','set'].includes(x)),ri=h.findIndex(x=>x=='rarity'),fi=h.findIndex(x=>x=='foil');
+  rows.slice(1).forEach(r=>{const n=(r[ni]||'').trim();if(n){m.set(n,(m.get(n)||0)+(qi>=0?parseInt(r[qi])||1:1));if(ii>=0&&/^[0-9a-f-]{36}$/i.test((r[ii]||'').trim())&&!ids.has(n))ids.set(n,r[ii].trim());addMeta(n,r[si],r[ri]);if(fi>=0&&/foil|etched/i.test(r[fi]||'')&&!/^(normal|false|no)$/i.test((r[fi]||'').trim()))foilQ.set(n,(foilQ.get(n)||0)+(qi>=0?parseInt(r[qi])||1:1))}});
  }else t.split(/\r?\n/).forEach(l=>{
   const x=l.trim().match(/^(?:(\d+)x?\s+)?(.+?)(\s+\(\w+\).*)?$/);
   if(x&&x[2]&&!x[2].startsWith('//'))m.set(x[2].trim(),(m.get(x[2].trim())||0)+(+x[1]||1));
@@ -241,13 +253,13 @@ async function load(){
   save()}
  const seen=new Set();lib=[];const miss=[];
  names.forEach(n=>{const c=cards[n.toLowerCase()];if(c===undefined)return;if(!c){miss.push(n);return}if(!seen.has(c.n)){seen.add(c.n);lib.push(c)}});
- ownSet=new Set(lib.map(c=>c.n));qty=new Map();meta=new Map();names.forEach(n=>{const c=cards[n.toLowerCase()];if(!c)return;qty.set(c.n,(qty.get(c.n)||0)+m.get(n));const raw=metaRaw.get(n),o=meta.get(c.n)||{sets:new Set(),rars:new Set()};if(raw){raw.sets.forEach(x=>o.sets.add(x));raw.rars.forEach(x=>o.rars.add(x))}meta.set(c.n,o)});
+ ownSet=new Set(lib.map(c=>c.n));qty=new Map();foilN=new Map();meta=new Map();names.forEach(n=>{const c=cards[n.toLowerCase()];if(!c)return;qty.set(c.n,(qty.get(c.n)||0)+m.get(n));if(foilQ.get(n))foilN.set(c.n,(foilN.get(c.n)||0)+foilQ.get(n));const raw=metaRaw.get(n),o=meta.get(c.n)||{sets:new Set(),rars:new Set()};if(raw){raw.sets.forEach(x=>o.sets.add(x));raw.rars.forEach(x=>o.rars.add(x))}meta.set(c.n,o)});
  RB.cp[1]=Math.min(12,Math.max(1,...qty.values()));flt.r.cp=[1,RB.cp[1]];fillOpts();syncBars();
  msg((lib.length?`Loaded ${lib.length} unique cards.`:'No cards could be loaded.')
   +(failed?` Scryfall didn't respond for ${failed} cards, so they're missing for now. Click Load collection again to retry just those.`:'')
   +(miss.length?` ${miss.length} not recognised: ${miss.slice(0,5).join(', ')}${miss.length>5?'\u2026':''}`:'')
   +(!lib.length&&failed?' If you opened this page from inside Claude, save the file and open it from your computer instead; the preview blocks internet access.':''));
- if(lib.length){collT=Date.now();persist();homeStatus();$('#s3').hidden=true}
+ if(lib.length){collT=Date.now();persist();homeStatus();$('#s3').hidden=true;syncRemote().then(()=>{renderPriceStatus();homeStatus()})}
 }
 
 // ---------- commander picker ----------
@@ -408,7 +420,7 @@ const act=e=>{if(e.target.closest('[data-info]'))return;const t=e.target.closest
 ['#deck','#sugg'].forEach(s=>{$(s).onclick=act;$(s).onkeydown=e=>{if(e.key=='Enter'&&e.target.dataset&&!e.target.dataset.b)act(e)}});
 
 // ---------- top 20 swaps ----------
-const eur=v=>v?'\u20ac'+(+v).toFixed(2):'n/a';
+const eur=v=>v?'£'+(+v*fxNow).toFixed(2):'n/a';
 let curSw=[],loadingUps=false,upsFailed=false;
 async function loadUps(){
  if(loadingUps)return;loadingUps=true;
@@ -449,7 +461,7 @@ function renderUps(){
  if(upsFailed){curSw=[];el.innerHTML='<h2>Top 20 swaps</h2><p class="m">Couldn\'t reach Scryfall for upgrade suggestions. Your deck is unaffected.</p><button id="retryUps">Try again</button>';return}
  curSw=swaps();
  const buy=curSw.filter(s=>!ownSet.has(s.u.n)),cost=buy.reduce((a,s)=>a+(+s.u.p||0),0);
- let h=`<h2>Top 20 swaps for ${cmd.n}</h2><p class="m">Legal cards that beat the weakest matching card in your deck, ranked by how much they improve it. Scores favour your commander's synergies and overall popularity (EDHREC). Prices are Cardmarket EUR averages from Scryfall, refreshed daily.</p>`;
+ let h=`<h2>Top 20 swaps for ${cmd.n}</h2><p class="m">Legal cards that beat the weakest matching card in your deck, ranked by how much they improve it. Scores favour your commander's synergies and overall popularity (EDHREC). Prices are Cardmarket averages from Scryfall, converted to pounds at today's rate and refreshed daily.</p>`;
  h+=`<div class="tools"><strong>${buy.length} to buy, about ${eur(cost)}</strong><button id="swall">Apply all</button><button class="alt" id="wcopy">Copy buy list</button></div>`;
  h+=curSw.map((s,i)=>{const u=s.u,w=ev(u).why.slice(0,3).join(', ');
   return `<div class="row swap" data-n="${enc(u.n)}"><div><b>${u.n}</b> <span class="m">${u.mc}</span><br><span class="m">replaces ${s.o.n}${s.o.basic?' (basic)':''}${w?' · fits: '+w:''}${u.er?' · EDHREC #'+u.er:''}</span></div><div class="c">${ownSet.has(u.n)?'Owned':eur(u.p)} ${!ownSet.has(u.n)&&u.cm?`<a href="${u.cm}" target="_blank" rel="noopener" style="color:var(--gold)">Cardmarket</a>`:''} <button class="info" data-info="${enc(u.n)}" aria-label="Show details for ${u.n}">i</button><button data-sw="${i}">Swap</button></div></div>`}).join('')||'<p class="m">No clear upgrades found. This deck already beats the candidates.</p>';
@@ -569,16 +581,19 @@ const idb={db:null,open(){return this.db||(this.db=new Promise((res,rej)=>{const
  async get(k){try{const d=await this.open();return await new Promise(res=>{const q=d.transaction('kv').objectStore('kv').get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>res(undefined)})}catch(e){return undefined}},
  async set(k,v){try{const d=await this.open();return await new Promise(res=>{const t=d.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=()=>res(true);t.onerror=()=>res(false)})}catch(e){return false}}};
 let collT=0;
-const persist=()=>idb.set('coll',{t:collT,lib,qty:[...qty],meta:[...meta].map(([k,v])=>[k,{sets:[...v.sets],rars:[...v.rars]}])});
-async function restore(){const d=await idb.get('coll');if(!d||!d.lib||!d.lib.length||d.lib[0].fm===undefined)return;
- lib=d.lib;qty=new Map(d.qty);collT=d.t;meta=new Map((d.meta||[]).map(([k,v])=>[k,{sets:new Set(v.sets),rars:new Set(v.rars)}]));
- ownSet=new Set(lib.map(c=>c.n));RB.cp[1]=Math.min(12,Math.max(1,...qty.values()));flt.r.cp=[1,RB.cp[1]];fillOpts();syncBars()}
+const collPayload=()=>({t:collT,lib,qty:[...qty],foil:[...foilN],meta:[...meta].map(([k,v])=>[k,{sets:[...v.sets],rars:[...v.rars]}])});
+const persist=()=>idb.set('coll',collPayload());
+function applyColl(d){if(!d||!d.lib||!d.lib.length||d.lib[0].fm===undefined)return false;
+ lib=d.lib;qty=new Map(d.qty);foilN=new Map(d.foil||[]);collT=d.t;meta=new Map((d.meta||[]).map(([k,v])=>[k,{sets:new Set(v.sets),rars:new Set(v.rars)}]));
+ ownSet=new Set(lib.map(c=>c.n));RB.cp[1]=Math.min(12,Math.max(1,...qty.values()));flt.r.cp=[1,RB.cp[1]];fillOpts();syncBars();return true}
+async function restore(){applyColl(await idb.get('coll'))}
+const hDatesN=()=>Object.keys(hist.d).length;
 function homeStatus(){const n=lib.length;
- $('#hstat').innerHTML=n?`<b>${n} unique cards</b> in your saved collection${collT?` (loaded ${new Date(collT).toLocaleDateString()})`:''}. It stays in this browser, so you only need to import again when your collection changes.`:'No collection loaded yet. Import one above to unlock the Commander builder.';
+ $('#hstat').innerHTML=n?`<b>${n} unique cards</b> in your saved collection${collT?` (loaded ${new Date(collT).toLocaleDateString()})`:''}. It stays in this browser, so you only need to import again when your collection changes.`+(hDatesN()?` Price history: ${hDatesN()} day${hDatesN()==1?'':'s'}.`:''):'No collection loaded yet. Import one above to unlock the Commander builder.';
  document.querySelectorAll('.tile[data-needs]').forEach(b=>b.disabled=!n)}
-function openTool(t){['home','cmd','draft','sixty'].forEach(k=>$(k=='home'?'#home':'#tool-'+k).hidden=k!=t);$('#homeBtn').hidden=t=='home';
+function openTool(t){['home','cmd','draft','sixty','price'].forEach(k=>$(k=='home'?'#home':'#tool-'+k).hidden=k!=t);$('#homeBtn').hidden=t=='home';
  if(t=='cmd'){$('#s2').hidden=false;$('#s5').hidden=false;showCmds();renderG()}
- if(t=='draft')initDraft();if(t=='sixty')ssearch();scrollTo(0,0)}
+ if(t=='draft')initDraft();if(t=='sixty')ssearch();if(t=='price')renderPrice();scrollTo(0,0)}
 
 // ---------- 40-card draft builder ----------
 let dpool=new Map(),dres=[],dout=null;
@@ -709,12 +724,134 @@ $('#dclear').onclick=()=>{dpool=new Map();dout=null;savePool();renderDraft()};
 document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-tool]');if(t&&!t.disabled)openTool(t.dataset.tool)});
 $('#homeBtn').onclick=()=>openTool('home');
 (async()=>{const c=await idb.get('cards');{const f0=Object.values(c||{}).find(Boolean);if(c&&f0&&f0.fm!==undefined)Object.assign(cards,c);else if(c)idb.set('cards',{})}if(Object.keys(cards).length)save();try{localStorage.removeItem(CK)}catch(e){}
- await restore();homeStatus();const p=await idb.get('pool');if(p)dpool=new Map(p);})();
+ await restore();homeStatus();const p=await idb.get('pool');if(p)dpool=new Map(p);
+ hist=Object.assign({d:{},fx:{},src:{}},(await idb.get('prices'))||{});await loadFx();const rem=await syncRemote();homeStatus();
+ if(lib.length&&!hist.d[todayS()]&&!(rem&&rem>=dAgo(todayS(),1)))snapshot();})();
+
+// ---------- price tracker ----------
+let hist={d:{},fx:{},src:{}},fxNow=0.85,foilN=new Map(),foilQ=new Map(),snapping=false;
+const pr={range:'1M',sel:null};
+const RNG=[['1W',7],['1M',30],['3M',91],['6M',182],['1Y',365],['All',1e9]];
+const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const todayS=()=>ymd(new Date()),dAgo=(s,n)=>{const d=new Date(s+'T12:00:00');d.setDate(d.getDate()-n);return ymd(d)};
+const fd=s=>new Date(s+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+const gb=v=>'£'+v.toLocaleString('en-GB',{minimumFractionDigits:2,maximumFractionDigits:2});
+const sg=v=>(v>=0?'+':'−')+gb(Math.abs(v));
+const hDates=()=>Object.keys(hist.d).sort();
+const saveHist=()=>idb.set('prices',hist);
+// value of the copies you own: normal copies at the normal price, foils at the foil price (each falls back to the other if missing)
+const cv=(n,pe)=>{if(!pe)return 0;const q=qty.get(n)||1,f=Math.min(q,foilN.get(n)||0),e=pe[0]??pe[1]??0,ff=pe[1]??pe[0]??0;return(q-f)*e+f*ff};
+function allSeries(){const last=new Map();return hDates().map(d=>{for(const n in hist.d[d])last.set(n,hist.d[d][n]);let t=0;lib.forEach(c=>{t+=cv(c.n,last.get(c.n))});return{d,t:t*rt(d)}})}
+function stateAt(day){const last=new Map();for(const d of hDates()){if(d>day)break;for(const n in hist.d[d])last.set(n,hist.d[d][n])}return last}
+
+// exchange rate: GBP per EUR. Each day's rate is kept so the history is valued in pounds as it was that day.
+const rt=d=>{const f=hist.fx||{};let v=null,first=null;for(const k of Object.keys(f).sort()){if(first==null)first=f[k];if(k<=d)v=f[k];else break}return v??first??fxNow};
+async function loadFx(){
+ try{const j=await(await fetch('https://api.frankfurter.dev/v1/latest?base=EUR&symbols=GBP')).json(),v=j&&j.rates&&j.rates.GBP;if(v>0){hist.fx[todayS()]=v;await saveHist()}}catch(e){}
+ const ks=Object.keys(hist.fx).sort();if(ks.length)fxNow=hist.fx[ks[ks.length-1]]}
+// Daily files written by the GitHub job (data/index.json + data/prices/DATE.json), read from the same site.
+// The files also hold every Standard card, but only entries for cards you own are kept in the browser.
+// When new cards appear in your collection, every day is re-read so they pick up their earlier history.
+let remoteKeys=new Set();
+async function syncRemote(){
+ if(!lib.length)return hist.remote||'';
+ try{const r=await fetch('data/index.json',{cache:'no-store'});if(!r.ok)return'';
+  const ds=((await r.json()).dates||[]).slice().sort(),latest=ds[ds.length-1],want=new Set(lib.map(c=>c.n)),kept=new Set(hist.kept||[]);
+  if([...want].some(n=>!kept.has(n)))hist.src={};
+  for(const d of ds){const done=hist.src[d]=='r';if(done&&d!==latest)continue;
+   try{const x=await(await fetch('data/prices/'+d+'.json')).json();
+    if(d===latest)remoteKeys=new Set(Object.keys(x.p||{}));
+    if(!done){hist.d[d]=hist.d[d]||{};for(const k in x.p)if(want.has(k))hist.d[d][k]=x.p[k];if(x.fx>0)hist.fx[d]=x.fx;hist.src[d]='r'}}catch(e){}}
+  hist.kept=[...want];hist.remote=latest||'';await saveHist();return hist.remote}catch(e){return''}}
+function renderPriceStatus(){const el=$('#pauto');if(!el)return;
+ const miss=hist.remote&&remoteKeys.size?lib.filter(c=>!remoteKeys.has(c.n)).length:0;
+ el.innerHTML=hist.remote?`Automatic daily recording is on. Latest day recorded by GitHub: <b>${fd(hist.remote)}</b>.`+(miss?` <span class="bad">${miss} card${miss==1?" in your collection isn't":"s in your collection aren't"} being recorded yet.</span> Download cards.json below and upload it to your repository. Until then they only get snapshots on the days you open the app.`:''):"Automatic recording isn't set up, or this page isn't running from your GitHub site. Until it is, the app records a snapshot each day you open it."}
+function downloadCards(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(lib.map(c=>c.n).sort())],{type:'application/json'}));a.download='cards.json';a.click()}
+async function snapshot(){
+ if(snapping||!lib.length)return;snapping=true;const st=$('#pstat'),day=todayS(),entry={};let got=0,failed=0,nop=0;
+ const say=t=>{st.textContent=t;const h=$('#hprice');if(h)h.textContent=t};
+ try{
+  for(let i=0;i<lib.length;i+=75){
+   say(`Recording prices… ${Math.min(i+75,lib.length)} of ${lib.length}`);
+   const b=lib.slice(i,i+75);
+   try{const data=await post(b.map(c=>({name:c.n.split(' // ')[0]}))),by={};
+    data.forEach(c=>{by[c.name.toLowerCase()]=c;c.name.split(' // ').forEach(x=>by[x.toLowerCase()]=by[x.toLowerCase()]||c)});
+    b.forEach(c=>{const x=by[c.n.toLowerCase()]||by[c.n.split(' // ')[0].toLowerCase()],p=x&&x.prices;
+     if(p&&(p.eur!=null||p.eur_foil!=null)){entry[c.n]=[p.eur!=null?+p.eur:null,p.eur_foil!=null?+p.eur_foil:null];got++}else nop++});
+   }catch(e){failed+=b.length}
+   await sleep(120)}
+  if(got){hist.d[day]=Object.assign(hist.d[day]||{},entry);await saveHist()}
+  say(got?`Recorded ${got} prices for ${fd(day)}.`+(nop?` ${nop} cards have no Cardmarket price.`:'')+(failed?` ${failed} cards couldn't be reached; click Record prices now to retry.`:''):'Could not reach Scryfall, so nothing was recorded. Check your connection and try again.');
+ }finally{snapping=false;homeStatus();renderPrice()}}
+
+function lineSvg(pts){
+ const W=640,H=230,L=70,R=14,T=14,B=30,xs=pts.map(p=>new Date(p.d+'T12:00:00').getTime()),x0=xs[0],x1=xs[xs.length-1];
+ let lo=Math.min(...pts.map(p=>p.t)),hi=Math.max(...pts.map(p=>p.t));const pad=(hi-lo)*.12||Math.max(1,hi*.02);lo=Math.max(0,lo-pad);hi+=pad;
+ const X=i=>L+(x1==x0?.5:(xs[i]-x0)/(x1-x0))*(W-L-R),Y=v=>T+(1-(v-lo)/(hi-lo))*(H-T-B);
+ let s=`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Collection value from ${fd(pts[0].d)} to ${fd(pts[pts.length-1].d)}">`;
+ for(let k=0;k<4;k++){const v=lo+(hi-lo)*k/3,y=Y(v);s+=`<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" style="stroke:var(--line)"/><text x="${L-8}" y="${y+4}" text-anchor="end" style="fill:var(--mut);font-size:11px">${gb(v).replace(/\.\d+$/,'')}</text>`}
+ s+=`<path d="${pts.map((p,i)=>(i?'L':'M')+X(i).toFixed(1)+' '+Y(p.t).toFixed(1)).join(' ')}" style="fill:none;stroke:var(--gold);stroke-width:2.5;stroke-linejoin:round"/>`;
+ pts.forEach((p,i)=>{s+=`<circle cx="${X(i)}" cy="${Y(p.t)}" r="${pts.length<=60?3.5:0}" style="fill:var(--gold)"/><circle cx="${X(i)}" cy="${Y(p.t)}" r="10" style="fill:transparent"><title>${fd(p.d)}: ${gb(p.t)}</title></circle>`});
+ s+=`<text x="${L}" y="${H-8}" style="fill:var(--mut);font-size:11px">${fd(pts[0].d)}</text><text x="${W-R}" y="${H-8}" text-anchor="end" style="fill:var(--mut);font-size:11px">${fd(pts[pts.length-1].d)}</text></svg>`;
+ return s}
+function barSvg(pts,label){
+ const W=640,H=210,L=58,R=10,T=10,B=28,n=pts.length,hi=(Math.max(...pts.map(p=>p.v))||1)*1.1,bw=(W-L-R)/n,Y=v=>T+(1-v/hi)*(H-T-B);
+ let s=`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}">`;
+ [0,.5,1].forEach(k=>{const y=Y(hi*k);s+=`<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" style="stroke:var(--line)"/><text x="${L-8}" y="${y+4}" text-anchor="end" style="fill:var(--mut);font-size:11px">${gb(hi*k)}</text>`});
+ pts.forEach((p,i)=>{const y=Y(p.v);s+=`<rect x="${(L+i*bw+bw*.15).toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1,bw*.7).toFixed(1)}" height="${Math.max(1,H-B-y).toFixed(1)}" rx="1.5" style="fill:var(--gold)"><title>${fd(p.d)}: ${gb(p.v)}</title></rect>`});
+ s+=`<text x="${L}" y="${H-8}" style="fill:var(--mut);font-size:11px">${fd(pts[0].d)}</text><text x="${W-R}" y="${H-8}" text-anchor="end" style="fill:var(--mut);font-size:11px">${fd(pts[n-1].d)}</text></svg>`;
+ return s}
+const cutoff=()=>{const ds=hDates();if(!ds.length)return'';const k=RNG.find(r=>r[0]==pr.range)[1];return k>=1e9?ds[0]:dAgo(ds[ds.length-1],k)};
+const chg=(a,b)=>{const d=b-a,p=a?d/a*100:0;return`<span class="${d>=0?'good':'bad'}">${d>=0?'▲':'▼'} ${sg(d)} (${d>=0?'+':'−'}${Math.abs(p).toFixed(1)}%)</span>`};
+const prow=(c,right)=>`<div class="row" tabindex="0" data-pc="${enc(c.n)}" data-n="${enc(c.n)}"><span>${esc(c.n)}${qty.get(c.n)>1?` <span class="m">×${qty.get(c.n)}</span>`:''}</span><span class="c">${right}</span></div>`;
+function renderPrice(){
+ const ds=hDates(),el=$('#pchart');
+ renderPriceStatus();
+ $('#prange').innerHTML=RNG.map(([k])=>`<button class="chip wide" data-rg="${k}" aria-pressed="${pr.range==k}">${k}</button>`).join('');
+ if(!ds.length){$('#pkpi').innerHTML='';el.innerHTML='<p class="m">No prices recorded yet. Click <b>Record prices now</b>. It takes a few seconds, and the app will also record automatically the first time you open it each day.</p>';$('#pmov').innerHTML='';$('#ptop').innerHTML='';$('#pcard').innerHTML='';return}
+ const all=allSeries(),cut=cutoff(),pts=all.filter(p=>p.d>=cut),last=all[all.length-1];
+ $('#pkpi').innerHTML=`<div><b>${gb(last.t)}</b><span class="m">Collection value on ${fd(last.d)}</span></div>`+(pts.length>1?`<div><b>${chg(pts[0].t,last.t)}</b><span class="m">Since ${fd(pts[0].d)}</span></div>`:'')+`<div><b>${ds.length}</b><span class="m">day${ds.length==1?'':'s'} of history</span></div>`;
+ el.innerHTML=pts.length>1?lineSvg(pts):`<p class="m">The chart needs at least two recorded days in this range. ${ds.length==1?'You have one so far, and the app adds one each day you open it.':'Try a longer range.'}</p>`;
+ $('#pcov').textContent=ds.length>1?`Points are the days a snapshot was recorded, so days you didn't open the app show as gaps. Prices are Cardmarket averages converted from euros to pounds at each day's exchange rate. Cardmarket itself prices in euros, so these are conversions, not UK prices.`:'';
+ // movers
+ if(pts.length>1){const a=stateAt(pts[0].d),b=stateAt(last.d),rows=lib.filter(c=>a.get(c.n)&&b.get(c.n)).map(c=>({c,d:cv(c.n,b.get(c.n))*rt(last.d)-cv(c.n,a.get(c.n))*rt(pts[0].d)})).filter(r=>Math.abs(r.d)>=.005).sort((x,y)=>y.d-x.d);
+  const up=rows.filter(r=>r.d>0).slice(0,8),dn=rows.filter(r=>r.d<0).slice(-8).reverse();
+  $('#pmov').innerHTML=`<h4>Biggest gains</h4>${up.map(r=>prow(r.c,`<span class="good">${sg(r.d)}</span>`)).join('')||'<p class="m">None.</p>'}<h4>Biggest drops</h4>${dn.map(r=>prow(r.c,`<span class="bad">${sg(r.d)}</span>`)).join('')||'<p class="m">None.</p>'}`}
+ else $('#pmov').innerHTML='<p class="m">Movers appear once there are two recorded days in the range.</p>';
+ const b=stateAt(last.d);
+ $('#ptop').innerHTML=lib.map(c=>({c,v:cv(c.n,b.get(c.n))*rt(last.d),u:((b.get(c.n)||[])[0]??(b.get(c.n)||[])[1])*rt(last.d)})).filter(r=>r.v>0).sort((x,y)=>y.v-x.v).slice(0,25).map(r=>prow(r.c,`${gb(r.v)}${qty.get(r.c.n)>1?` <span class="m">(${gb(r.u||0)} each)</span>`:''}`)).join('')||'<p class="m">No priced cards.</p>';
+ renderPCard(cut)}
+function renderPCard(cut){
+ const n=pr.sel,el=$('#pcard');if(!n){el.innerHTML='<p class="m">Search above, or click any card in the lists, to see its price history.</p>';return}
+ cut=cut||cutoff();const c=lib.find(x=>x.n==n);if(!c){el.innerHTML='';return}
+ const pts=hDates().filter(d=>d>=cut&&hist.d[d][n]).map(d=>({d,v:(hist.d[d][n][0]??hist.d[d][n][1])*rt(d)})).filter(p=>p.v!=null);
+ const ld=hDates().filter(d=>hist.d[d][n]).pop(),lf=ld&&hist.d[ld][n],rl=ld?rt(ld):1,fq=Math.min(qty.get(n)||1,foilN.get(n)||0);
+ el.innerHTML=`<h4>${esc(c.n)} <span class="m">${esc(c.mc)} · you own ${qty.get(n)||1}${fq?` (${fq} foil)`:''}</span></h4>`+(lf?`<div class="m">Latest: ${lf[0]!=null?gb(lf[0]*rl):'no normal price'}${lf[1]!=null?` · foil ${gb(lf[1]*rl)}`:''} each${pts.length>1?` · ${chg(pts[0].v,pts[pts.length-1].v)} over this range`:''}</div>`:'<div class="m">No price recorded for this card.</div>')+(pts.length?barSvg(pts,`Price of ${c.n} per day`):'<p class="m">No recorded prices in this range.</p>')+(c.cm?`<div class="m"><a href="${esc(c.cm)}" target="_blank" rel="noopener" style="color:var(--gold)">View on Cardmarket</a></div>`:'')}
+$('#tool-price').addEventListener('click',e=>{const t=e.target.closest('[data-rg],[data-pc],#psnap');if(!t||e.target.closest('[data-info]'))return;
+ if(t.id=='psnap')snapshot();
+ else if(t.dataset.rg){pr.range=t.dataset.rg;renderPrice()}
+ else{pr.sel=decodeURIComponent(t.dataset.pc);renderPCard();$('#pcard').scrollIntoView({behavior:'smooth',block:'nearest'})}});
+$('#pq').oninput=()=>{const q=$('#pq').value.trim().toLowerCase();
+ $('#pres').innerHTML=q?lib.filter(c=>c.n.toLowerCase().includes(q)).slice(0,8).map(c=>prow(c,esc(c.mc))).join('')||'<p class="m">No match.</p>':''};
+
+// ---------- backup ----------
+function exportBackup(){const b={v:1,saved:new Date().toISOString(),coll:collPayload(),pool:[...dpool],prices:hist};
+ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(b)],{type:'application/json'}));a.download='mtg-tools-backup-'+todayS()+'.json';a.click();
+ $('#bmsg').textContent='Backup downloaded. Keep it somewhere safe.'}
+async function importBackup(file){
+ try{const b=JSON.parse(await file.text());if(!b||b.v!==1)throw 0;const done=[];
+  if(b.coll&&applyColl(b.coll)){await persist();done.push(`${lib.length} cards`)}
+  if(Array.isArray(b.pool)&&b.pool.length){dpool=new Map(b.pool);await savePool();done.push('draft pool')}
+  if(b.prices&&b.prices.d){const n=Object.keys(b.prices.d).length;hist.fx=hist.fx||{};for(const d in b.prices.d)hist.d[d]=Object.assign(hist.d[d]||{},b.prices.d[d]);Object.assign(hist.fx,b.prices.fx||{});await saveHist();done.push(`${n} days of prices`)}
+  homeStatus();$('#bmsg').textContent=done.length?'Restored: '+done.join(', ')+'.':'That backup file was empty.'}
+ catch(e){$('#bmsg').textContent="That doesn't look like a backup file from this tool."}}
+$('#pcards').onclick=downloadCards;$('#bexp').onclick=exportBackup;$('#bimp').onclick=()=>$('#bfile').click();$('#bfile').onchange=e=>{const f=e.target.files[0];if(f)importBackup(f);e.target.value=''};
+
 
 // ---------- wiring ----------
 $('#file').onchange=e=>{const f=e.target.files[0];if(f)f.text().then(t=>{$('#paste').value=t;msg(`Read ${f.name}. Click Load collection.`)})};
 $('#go').onclick=load;
-$('#clear').onclick=async()=>{cards={};lib=[];qty=new Map();ownSet=new Set();dpool=new Map();dout=null;await idb.set('cards',{});await idb.set('coll',null);await idb.set('pool',null);try{localStorage.removeItem(CK)}catch(e){}homeStatus();msg('Saved collection, pool and card data cleared.')};
+$('#clear').onclick=async()=>{cards={};lib=[];qty=new Map();ownSet=new Set();dpool=new Map();dout=null;await idb.set('cards',{});await idb.set('coll',null);await idb.set('pool',null);try{localStorage.removeItem(CK)}catch(e){}homeStatus();msg('Saved collection, pool and card data cleared. Your price history was kept.')};
 $('#fbarG').innerHTML=barHtml();$('#fbarS').innerHTML=barHtml();$('#fbarT').innerHTML=barHtml();syncBars();
 $('#csearch').oninput=showCmds;$('#gsearch').oninput=renderG;$('#fitOnly').onchange=$('#hideDeck').onchange=()=>cmd&&render();$('#ssearch').oninput=()=>cmd&&render();
 $('#auto').onclick=auto;
