@@ -810,11 +810,11 @@ async function syncRemote(){
     if(!done){hist.d[d]=hist.d[d]||{};for(const k in x.p)if(want.has(k))hist.d[d][k]=x.p[k];if(x.fx>0)hist.fx[d]=x.fx;hist.src[d]='r'}}catch(e){}}
   hist.kept=[...want];hist.remote=latest||'';await saveHist();return hist.remote}catch(e){return''}}
 function renderPriceStatus(){const el=$('#pauto');if(!el)return;
- const miss=hist.remote&&remoteKeys.size?lib.filter(c=>!remoteKeys.has(c.n)).length:0;
- el.innerHTML=hist.remote?`Automatic daily recording is on. Latest day recorded by GitHub: <b>${fd(hist.remote)}</b>.`+(miss?` <span class="bad">${miss} card${miss==1?" in your collection isn't":"s in your collection aren't"} being recorded yet.</span> Download cards.json below and upload it to your repository. Until then they only get snapshots on the days you open the app.`:''):"Automatic recording isn't set up, or this page isn't running from your GitHub site. Until it is, the app records a snapshot each day you open it."}
+ const ml=hist.remote&&remoteKeys.size?lib.filter(c=>!remoteKeys.has(c.n)).map(c=>c.n).sort():[],miss=ml.length;
+ el.innerHTML=hist.remote?`Automatic daily recording is on. Latest day recorded by GitHub: <b>${fd(hist.remote)}</b>.`+(miss?` <span class="bad">${miss} card${miss==1?" in your collection isn't":"s in your collection aren't"} in the nightly record.</span> Either they aren't in cards.json yet (download it below and upload it to your repository), or Scryfall's default printing has no Cardmarket price, which is common for basic lands and some promos. The newest recorder script handles that second case. Until then they only get snapshots on the days you open the app.<details><summary>Which cards?</summary><p class="m">${ml.map(esc).join(', ')}</p></details>`:''):"Automatic recording isn't set up, or this page isn't running from your GitHub site. Until it is, the app records a snapshot each day you open it."}
 function downloadCards(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(lib.map(c=>c.n).sort())],{type:'application/json'}));a.download='cards.json';a.click()}
 async function snapshot(){
- if(snapping||!lib.length)return;snapping=true;const st=$('#pstat'),day=todayS(),entry={};let got=0,failed=0,nop=0;
+ if(snapping||!lib.length)return;snapping=true;const st=$('#pstat'),day=todayS(),entry={};let got=0,failed=0,nop=0;const nopL=[];
  const say=t=>{st.textContent=t;const h=$('#hprice');if(h)h.textContent=t};
  try{
   for(let i=0;i<lib.length;i+=75){
@@ -823,9 +823,11 @@ async function snapshot(){
    try{const data=await post(b.map(c=>({name:c.n.split(' // ')[0]}))),by={};
     data.forEach(c=>{by[c.name.toLowerCase()]=c;c.name.split(' // ').forEach(x=>by[x.toLowerCase()]=by[x.toLowerCase()]||c)});
     b.forEach(c=>{const x=by[c.n.toLowerCase()]||by[c.n.split(' // ')[0].toLowerCase()],p=x&&x.prices;
-     if(p&&(p.eur!=null||p.eur_foil!=null)){entry[c.n]=[p.eur!=null?+p.eur:null,p.eur_foil!=null?+p.eur_foil:null];got++}else nop++});
+     if(p&&(p.eur!=null||p.eur_foil!=null)){entry[c.n]=[p.eur!=null?+p.eur:null,p.eur_foil!=null?+p.eur_foil:null];got++}else{nop++;nopL.push(c)}});
    }catch(e){failed+=b.length}
    await sleep(120)}
+  if(nopL.length){say(`Looking up other printings for ${nopL.length} cards…`);for(const c of nopL.slice(0,40)){try{const r=await fetch('https://api.scryfall.com/cards/search?q='+enc('!"'+c.n.split(' // ')[0]+'" game:paper')+'&unique=prints&order=released&dir=desc'),j=r.ok?await r.json():null,x=j&&(j.data||[]).find(y=>y.prices&&(y.prices.eur!=null||y.prices.eur_foil!=null));
+   if(x){entry[c.n]=[x.prices.eur!=null?+x.prices.eur:null,x.prices.eur_foil!=null?+x.prices.eur_foil:null];got++;nop--}}catch(e){}await sleep(120)}}
   if(got){hist.d[day]=Object.assign(hist.d[day]||{},entry);await saveHist()}
   say(got?`Recorded ${got} prices for ${fd(day)}.`+(nop?` ${nop} cards have no Cardmarket price.`:'')+(failed?` ${failed} cards couldn't be reached; click Record prices now to retry.`:''):'Could not reach Scryfall, so nothing was recorded. Check your connection and try again.');
  }finally{snapping=false;homeStatus();renderPrice()}}
@@ -900,7 +902,7 @@ $('#pcards').onclick=downloadCards;$('#bexp').onclick=exportBackup;$('#bimp').on
 
 
 // ---------- deck checker ----------
-let chkCards=new Map(),chkData=null,gcSet=null,chkBusy=false;
+let chkCards=new Map(),chkData=null,gcSet=null,chkBusy=false,chkPlan=null,chkUndo=null;
 const FMTS={commander:'Commander',standard:'Standard',pioneer:'Pioneer',modern:'Modern',legacy:'Legacy',casual60:'60-card (any cards)','40':'40-card (draft)'};
 const FLET={standard:'s',pioneer:'p',modern:'m',legacy:'l'};
 const MLDN=new Set(['Armageddon','Ravages of War','Catastrophe','Devastation','Obliterate','Decree of Annihilation','Jokulhaups','Ruination','Apocalypse','Sunder','Winter Orb','Static Orb','Stasis','Blood Moon','Back to Basics','Rising Waters','Hokori, Dust Drinker','Boom // Bust','Wildfire','Impending Disaster','Tsunami','Acid Rain','Global Ruin','Cataclysm','Armageddon']);
@@ -933,7 +935,7 @@ async function loadGC(){
   if(n.length){gcSet=new Set(n);idb.set('gc',{t:Date.now(),n})}}catch(e){}
  return gcSet}
 async function runCheck(){
- if(chkBusy)return;const st=$('#chkMsg'),p=parseDeck($('#chkText').value),cn=$('#chkCmd').value.trim();
+ if(chkBusy)return;chkPlan=null;const st=$('#chkMsg'),p=parseDeck($('#chkText').value),cn=$('#chkCmd').value.trim();
  if(cn&&!p.cmd.some(x=>x.toLowerCase()==cn.toLowerCase())){p.cmd.push(cn);const k=[...p.main.keys()].find(x=>x.toLowerCase()==cn.toLowerCase());if(k){const v=p.main.get(k)-1;v>0?p.main.set(k,v):p.main.delete(k)}}
  const tot=[...p.main.values()].reduce((a,b)=>a+b,0)+p.cmd.length;
  if(!tot){st.textContent='Paste a decklist first.';return}
@@ -1014,9 +1016,15 @@ function renderCheck(){
  const h=healthChecks(d),ic={ok:'✔',warn:'⚠',bad:'✖',info:'•'},bad=h.R.filter(r=>r[0]=='bad').length,warn=h.R.filter(r=>r[0]=='warn').length;
  let o=`<h2>${FMTS[d.fmt]} deck: ${d.cmds.length?esc(d.cmds.map(c=>c.n).join(' + ')):h.total+' cards'}</h2>`;
  o+=`<div class="kpis"><div><b>${have} of ${need}</b><span class="m">non-basic cards you own</span></div><div><b class="${mcopies?'miss':'good'}">${mcopies?gb(cost):'Nothing to buy'}</b><span class="m">${mcopies?`to buy ${mcopies} missing card${mcopies==1?'':'s'}${noPrice?` (${noPrice} unpriced)`:''}`:'you own every card'}</span></div><div><b>${bad?bad+' to fix':warn?warn+' to look at':'Looks solid'}</b><span class="m">deck health</span></div></div>`;
- o+=`<h4>Deck health</h4><ul class="chk">${h.R.map(([l,t])=>`<li><span class="ic ${l}" aria-hidden="true">${ic[l]}</span><span class="sr">${l}: </span><span>${esc(t)}</span></li>`).join('')}</ul>`+bracketInfo(d);
+ o+=`<h4>Deck health</h4><ul class="chk">${h.R.map(([l,t])=>`<li><span class="ic ${l}" aria-hidden="true">${ic[l]}</span><span class="sr">${l}: </span><span>${esc(t)}</span></li>`).join('')}</ul>`+bracketInfo(d)+`<div class="tools"><button data-twgo>Tweak deck to fix its health</button>${chkUndo?'<button class="alt" data-twundo>Undo last tweaks</button>':''}</div>`+(chkPlan?planHtml(chkPlan):'');
  const cur=Array(8).fill(0);d.ents.forEach(e=>{if(!isLandC(e.c))cur[Math.min(7,Math.floor(e.c.cmc))]+=e.n});const mx=Math.max(1,...cur);
  o+=`<h4>Mana curve</h4><div class="bars">${cur.map((n,i)=>`<div><i style="height:${n/mx*50}px"></i>${i==7?'7+':i}<br>${n}</div>`).join('')}</div>`;
+ {const pp={W:0,U:0,B:0,R:0,G:0},sr={W:0,U:0,B:0,R:0,G:0,Colourless:0},nm=['W','U','B','R','G'];
+  d.ents.forEach(e=>{if(isLandC(e.c)){const pr=[...produces(e.c)];if(!pr.length)sr.Colourless+=e.n;else pr.forEach(x=>sr[x]+=e.n/pr.length);return}
+   (e.c.mc.match(/\{[^}]+\}/g)||[]).forEach(tk=>{const cs=tk.slice(1,-1).split('/').filter(x=>x.length==1&&'WUBRG'.includes(x));cs.forEach(x=>pp[x]+=e.n/cs.length)})});
+  d.cmds.forEach(c=>(c.mc.match(/\{[^}]+\}/g)||[]).forEach(tk=>{const cs=tk.slice(1,-1).split('/').filter(x=>x.length==1&&'WUBRG'.includes(x));cs.forEach(x=>pp[x]+=1/cs.length)}));
+  const it=r=>[...nm,'Colourless'].filter(k=>k in r).map(k=>({label:CNAME[k]||k,v:r[k],color:CCOL[k]}));
+  o+=`<h4>Colour balance</h4><div class="donuts">${donut('Colours your spells need (mana symbols)',it(pp),'symbols')}${donut('Colours your lands make (dual lands split evenly)',it(sr),'lands')}</div><p class="m">If a colour takes a big share of the left chart, the right chart should show a similar share.</p>`}
  o+=`<h4>Cards</h4><div class="tools"><button class="alt" data-chkcopy>Copy shopping list</button></div>`;
  const g={};rows.filter(e=>!only||e.short>0).forEach(e=>{const k=e.cmd?'Commander':tyOf(e.c);(g[k]=g[k]||[]).push(e)});
  const lab={Commander:'Commander',Creature:'Creatures',Planeswalker:'Planeswalkers',Instant:'Instants',Sorcery:'Sorceries',Artifact:'Artifacts',Enchantment:'Enchantments',Other:'Other',Land:'Lands'};
@@ -1028,11 +1036,88 @@ function renderCheck(){
  o+=`<p class="m">Prices are Cardmarket averages converted to pounds, fetched just now. Missing cards are in red, partly owned cards in gold.</p>`;
  el.innerHTML=o;el.hidden=false;chkData.rows=rows;
  if(chkId){const dk=decks.find(x=>x.id==chkId);if(dk){dk.last={miss:mcopies,cost,t:Date.now()};saveDecks()}}}
-function chkLoad(text,fmt,cmdName,id){chkId=id||null;chkSaveLabel();$('#chkText').value=text;$('#chkFmt').value=fmt||'auto';$('#chkCmd').value=cmdName||'';openTool('check');runCheck()}
+function tweakPlan(d){
+ const cm=d.fmt=='commander',S=cm?100:d.fmt=='40'?40:60,cmds=d.cmds,cci=cm&&cmds.length?new Set(cmds.flatMap(c=>c.ci)):null;
+ const target=S-(cm?cmds.length:0),work=new Map(),ops=[],notes=[],B=['Plains','Island','Swamp','Mountain','Forest'],CN={W:'White',U:'Blue',B:'Black',R:'Red',G:'Green'};
+ d.ents.forEach(e=>{const o=work.get(e.c.n);if(o)o.n+=e.n;else work.set(e.c.n,{c:e.c,n:e.n})});
+ const inDeck=new Set([...work.keys(),...cmds.map(c=>c.n)]);
+ const cancel=(t,c,k)=>{const o=ops.find(x=>x.t==t&&x.c.n==c.n);if(!o)return k;const m=Math.min(o.k,k);o.k-=m;if(!o.k)ops.splice(ops.indexOf(o),1);return k-m};
+ const push=(t,c,k,why)=>{const o=ops.find(x=>x.t==t&&x.c.n==c.n&&x.why==why);if(o)o.k+=k;else ops.push({t,c,k,why})};
+ const cut=(c,k,why)=>{const o=work.get(c.n);if(!o)return 0;k=Math.min(k,o.n);if(k<=0)return 0;o.n-=k;if(!o.n)work.delete(c.n);const r=cancel('add',c,k);if(r>0)push('cut',c,r,why);return k};
+ const add=(c,k,why)=>{const o=work.get(c.n);if(o)o.n+=k;else work.set(c.n,{c,n:k});const r=cancel('cut',c,k);if(r>0)push('add',c,r,why)};
+ const bc=n=>(work.get(n)||{}).c||chkCards.get(n)||{n,t:'Basic Land — '+n,o:'',ci:[],cmc:0,mc:'',l:'legal',fm:'spml',p:null};
+ const cnt=f=>[...work.values()].reduce((a,o)=>a+(f(o.c)?o.n:0),0),lands=()=>cnt(isLandC),total=()=>cnt(()=>true),role=k=>cnt(c=>!isLandC(c)&&cat(c)==k);
+ const rg=cm?[33,38]:d.fmt=='40'?[16,18]:[22,26],T=cm?36:d.fmt=='40'?17:24,lim=cm?3.6:d.fmt=='40'?3.3:3.4;
+ const needs=()=>{const pips={W:0,U:0,B:0,R:0,G:0},src={W:0,U:0,B:0,R:0,G:0};
+  work.forEach(o=>{if(isLandC(o.c)){produces(o.c).forEach(x=>src[x]+=o.n);return}
+   (o.c.mc.match(/\{[^}]+\}/g)||[]).forEach(tk=>{const cs=tk.slice(1,-1).split('/').filter(x=>x.length==1&&'WUBRG'.includes(x));cs.forEach(x=>pips[x]+=o.n/cs.length)})});
+  const tp=Object.values(pips).reduce((a,b)=>a+b,0),L=lands(),mn=cm?7:d.fmt=='40'?5:6,need={};
+  Object.keys(pips).forEach(x=>{if(pips[x]>0)need[x]=Math.max(mn,Math.round(L*(pips[x]/tp)*.9))});return{pips,src,need}};
+ const bad=c=>cm?(c.er>0?c.er:99999):-limVal(c),owned=c=>qty.get(c.n)||0;
+ const legal=c=>cm?(c.l!='banned'&&c.l!='not_legal'):FLET[d.fmt]?(c.fm||'').includes(FLET[d.fmt]):true;
+ const deckCols=new Set(cci?[...cci]:Object.keys(needs().pips).filter(x=>needs().pips[x]>0));
+ const colOK=c=>(cci?c.ci.every(x=>cci.has(x)):!deckCols.size||c.ci.every(x=>deckCols.has(x)));
+ const pool=lib.filter(c=>!/Basic/.test(c.t)&&!inDeck.has(c.n)&&owned(c)>0&&legal(c)&&colOK(c));
+ const avail=f=>pool.filter(c=>!work.has(c.n)&&f(c)).sort((a,b)=>bad(a)-bad(b));
+ const anyN=c=>/any number of cards named|a deck can have any number|up to \w+ cards named/.test(c.o.toLowerCase());
+ // 1. cards that break the rules
+ [...work.values()].forEach(o=>{const c=o.c;if(/Basic/.test(c.t))return;
+  if(cm){if(c.l=='banned'||c.l=='not_legal')cut(c,o.n,'Not legal in Commander');
+   else if(cci&&c.ci.some(x=>!cci.has(x)))cut(c,o.n,"Outside your commander's colours");
+   else if(o.n>1&&!anyN(c))cut(c,o.n-1,'Commander allows one copy')}
+  else if(d.fmt!='40'){if(FLET[d.fmt]&&!(c.fm||'').includes(FLET[d.fmt]))cut(c,o.n,'Not legal in '+FMTS[d.fmt]);else if(o.n>4&&!anyN(c))cut(c,o.n-4,'More than 4 copies')}});
+ // 2. spell roles
+ const prot=new Set();
+ if(cm)[['Ramp',8,'ramp'],['Draw',8,'card draw'],['Removal',5,'removal']].forEach(([k,m,nm])=>{const h=role(k);if(h<m)avail(c=>!isLandC(c)&&cat(c)==k).slice(0,m-h).forEach(c=>add(c,1,`Short on ${nm}`))});
+ const roleLow=c=>cm&&!isLandC(c)&&((cat(c)=='Ramp'&&role('Ramp')<=8)||(cat(c)=='Draw'&&role('Draw')<=8)||(cat(c)=='Removal'&&role('Removal')<=5));
+ const cuttable=()=>[...work.values()].filter(o=>!isLandC(o.c)&&!roleLow(o.c)&&!ops.some(x=>x.t=='add'&&x.c.n==o.c.n)).sort((a,b)=>bad(b.c)-bad(a.c));
+ // 5. top-heavy curve
+ if(cm){for(let i=0;i<8&&cnt(c=>!isLandC(c)&&c.cmc>=6)>10;i++){const o=cuttable().find(o=>o.c.cmc>=6);if(!o)break;cut(o.c,1,'Too many expensive cards')}}
+ else{for(let i=0;i<4;i++){const nn=cnt(c=>!isLandC(c)),av=nn?[...work.values()].reduce((a,o)=>a+(isLandC(o.c)?0:o.c.cmc*o.n),0)/nn:0;if(av<=lim)break;const o=cuttable().find(o=>o.c.cmc>=5);if(!o)break;cut(o.c,1,'Average mana value is high')}}
+ // 6. fill or trim the spells so the land count and the size both come out right
+ {const wantL=lands()<rg[0]?T:lands()>rg[1]?T:lands(),want=Math.max(0,target-wantL),nn=()=>cnt(c=>!isLandC(c));
+  while(nn()>want){const o=cuttable()[0];if(!o)break;cut(o.c,1,`To make room for ${wantL} lands in ${S} cards`)}
+  if(nn()<want){const f=avail(c=>!isLandC(c));let k=want-nn();for(const c of f){if(k<=0)break;add(c,1,`To reach ${S} cards`);k--}
+   if(k>0)notes.push(`Your collection has no more suitable cards to add, so the deck is still ${k} short of ${S}.`)}}
+ // 3. lands
+ const addLands=(k,why)=>{
+  const ls=avail(c=>isLandC(c)&&[...produces(c)].some(x=>deckCols.has(x))).sort((a,b)=>[...produces(b)].filter(x=>deckCols.has(x)).length-[...produces(a)].filter(x=>deckCols.has(x)).length||bad(a)-bad(b));
+  for(const c of ls){if(k<=0)break;add(c,1,why+' (a land you own that makes your colours)');k--}
+  while(k>0){const nd=needs(),cols=Object.keys(nd.pips).filter(x=>nd.pips[x]>0);if(!cols.length)break;
+   const x=cols.sort((a,b)=>nd.pips[b]/(nd.src[b]+1)-nd.pips[a]/(nd.src[a]+1))[0];add(bc(B['WUBRG'.indexOf(x)]),1,why);k--}};
+ let L=lands();
+ 
+ if(L<rg[0])addLands(T-L,`Only ${L} lands`);
+ else if(L>rg[1]){let x=L-T;while(x-->0){const b=B.map(n=>work.get(n)).filter(Boolean).sort((a,b)=>b.n-a.n)[0];if(!b)break;cut(b.c,1,`${L} lands is too many`)}}
+ // 4. colour sources, using basics only
+ for(let i=0;i<14;i++){const nd=needs(),sh=Object.keys(nd.need).filter(x=>nd.src[x]<nd.need[x]).sort((a,b)=>(nd.src[a]-nd.need[a])-(nd.src[b]-nd.need[b]))[0];if(!sh)break;
+  const dn=B.map((n,j)=>({n,x:'WUBRG'[j]})).filter(b=>work.has(b.n)&&b.x!=sh&&(!(b.x in nd.need)||nd.src[b.x]>nd.need[b.x])).sort((a,b)=>((nd.src[b.x]-(nd.need[b.x]||0))-(nd.src[a.x]-(nd.need[a.x]||0))))[0];
+  if(!dn)break;const why=`${CN[sh]} needs more sources`;cut(bc(dn.n),1,why);add(bc(B['WUBRG'.indexOf(sh)]),1,why)}
+ return{ops,notes,work,target,total:total()}}
+function planHtml(p){
+ const cuts=p.ops.filter(o=>o.t=='cut'),adds=p.ops.filter(o=>o.t=='add');
+ if(!p.ops.length)return`<div class="brk"><b>Nothing to tweak</b><div class="m">No swaps from your collection would improve the checks above.</div></div>`;
+ const line=o=>{const b=/Basic/.test(o.c.t);return`<li><span><b>${o.k>1?o.k+'× ':''}${esc(o.c.n)}</b>${o.t=='add'?(b?' <span class="m">(basic land)</span>':' <span class="good">✔ you own it</span>'):''}<br><span class="m">${esc(o.why)}</span></span></li>`};
+ const sum=(a)=>a.reduce((x,o)=>x+o.k,0);
+ return`<div class="brk"><b>Suggested tweaks: cut ${sum(cuts)}, add ${sum(adds)}</b><div class="m">Every card added is one you already own, plus basic lands, so this costs nothing. The deck ends at ${p.total} cards.</div>
+ <div class="cols"><div><h4>Cut</h4><ul class="chk">${cuts.map(line).join('')||'<li class="m">Nothing</li>'}</ul></div><div><h4>Add</h4><ul class="chk">${adds.map(line).join('')||'<li class="m">Nothing</li>'}</ul></div></div>
+ ${p.notes.map(n=>`<div class="m">${esc(n)}</div>`).join('')}<div class="m">Choices are based on card roles and popularity (EDHREC for Commander), and don't know your deck's plan, so look them over before applying.</div>
+ <div class="tools"><button data-twapply>Apply these tweaks</button></div></div>`}
+function applyTweaks(){
+ const p=chkPlan,d=chkData;if(!p||!d)return;chkUndo={text:$('#chkText').value,fmt:$('#chkFmt').value,cmd:$('#chkCmd').value};
+ const main=[...p.work.values()].map(o=>o.n+' '+o.c.n).join('\n'),side=d.side.map(e=>e.n+' '+e.c.n).join('\n');
+ $('#chkText').value=(d.cmds.length?'Commander\n'+d.cmds.map(c=>'1 '+c.n).join('\n')+'\n\nDeck\n':'')+main+(side?'\n\nSideboard\n'+side:'');
+ $('#chkFmt').value=d.fmt;$('#chkCmd').value='';chkPlan=null;runCheck()}
+function undoTweaks(){if(!chkUndo)return;$('#chkText').value=chkUndo.text;$('#chkFmt').value=chkUndo.fmt;$('#chkCmd').value=chkUndo.cmd;chkUndo=null;chkPlan=null;runCheck()}
+function chkLoad(text,fmt,cmdName,id){chkUndo=null;chkPlan=null;chkId=id||null;chkSaveLabel();$('#chkText').value=text;$('#chkFmt').value=fmt||'auto';$('#chkCmd').value=cmdName||'';openTool('check');runCheck()}
 $('#chkGo').onclick=runCheck;
-$('#chkClear').onclick=()=>{chkId=null;chkSaveLabel();$('#chkText').value='';$('#chkCmd').value='';chkData=null;$('#chkOut').hidden=true;$('#chkMsg').textContent=''};
+$('#chkClear').onclick=()=>{chkUndo=null;chkPlan=null;chkId=null;chkSaveLabel();$('#chkText').value='';$('#chkCmd').value='';chkData=null;$('#chkOut').hidden=true;$('#chkMsg').textContent=''};
 $('#chkMiss').onchange=renderCheck;
-$('#chkOut').addEventListener('click',e=>{if(e.target.dataset.chkcopy!==undefined&&chkData&&chkData.rows){
+$('#chkOut').addEventListener('click',e=>{const dd=e.target.dataset||{};
+ if(dd.twgo!==undefined&&chkData){chkPlan=tweakPlan(chkData);renderCheck();const b=$('#chkOut').querySelector('.brk:last-of-type');b&&b.scrollIntoView&&b.scrollIntoView({behavior:'smooth',block:'nearest'});return}
+ if(dd.twapply!==undefined){applyTweaks();return}
+ if(dd.twundo!==undefined){undoTweaks();return}
+ if(e.target.dataset.chkcopy!==undefined&&chkData&&chkData.rows){
  const t=chkData.rows.filter(r=>r.short>0).map(r=>r.short+' '+r.c.n).join('\n');navigator.clipboard.writeText(t).then(()=>e.target.textContent='Copied',()=>e.target.textContent='Copy failed')}});
 
 
@@ -1106,11 +1191,11 @@ function statRows(){
  return lib.map(c=>{const q=qty.get(c.n)||1,pe=last.get(c.n),v=pe?cv(c.n,pe)*fxNow:(c.p!=null&&c.p!==''?+c.p*q*fxNow:0),m=metaOf(c);
   return{c,q,v,sets:[...m.sets],rar:[...m.rars][0]||c.r||'other'}})}
 const colKey=c=>c.ci.length==0?'Colourless':c.ci.length==1?c.ci[0]:'Multicolour';
-function donut(title,items){
+function donut(title,items,unit){
  const tot=items.reduce((a,x)=>a+x.v,0);if(!tot)return`<div class="dn"><h4>${title}</h4><p class="m">No data yet.</p></div>`;
- const fmt=v=>st.by=='value'?gb(v):Math.round(v).toLocaleString('en-GB'),R=60,C=2*Math.PI*R;let off=0;
+ const fmt=v=>unit?String(Math.round(v)):st.by=='value'?gb(v):Math.round(v).toLocaleString('en-GB'),R=60,C=2*Math.PI*R;let off=0;
  const segs=items.filter(x=>x.v>0).map(x=>{const len=x.v/tot*C,gap=items.filter(y=>y.v>0).length>1?Math.min(2,len*.3):0,s=`<circle r="${R}" cx="80" cy="80" fill="none" stroke="${x.color}" stroke-width="22" stroke-dasharray="${Math.max(0,len-gap).toFixed(2)} ${(C-len+gap).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 80 80)"><title>${esc(x.label)}: ${fmt(x.v)} (${(x.v/tot*100).toFixed(1)}%)</title></circle>`;off+=len;return s}).join('');
- return`<div class="dn"><h4>${title}</h4><svg viewBox="0 0 160 160" width="160" height="160" role="img" aria-label="${esc(title)}: ${items.filter(x=>x.v>0).map(x=>x.label+' '+(x.v/tot*100).toFixed(0)+'%').join(', ')}">${segs}<text x="80" y="78" text-anchor="middle" fill="var(--tx)" font-size="15" font-weight="600">${fmt(tot)}</text><text x="80" y="94" text-anchor="middle" fill="var(--mut)" font-size="10">${st.by=='value'?'total':st.by}</text></svg><ul class="lg">${items.filter(x=>x.v>0).map(x=>`<li><i style="background:${x.color}"></i>${esc(x.label)}<b>${fmt(x.v)} <span class="m">${(x.v/tot*100).toFixed(0)}%</span></b></li>`).join('')}</ul></div>`}
+ return`<div class="dn"><h4>${title}</h4><svg viewBox="0 0 160 160" width="160" height="160" role="img" aria-label="${esc(title)}: ${items.filter(x=>x.v>0).map(x=>x.label+' '+(x.v/tot*100).toFixed(0)+'%').join(', ')}">${segs}<text x="80" y="78" text-anchor="middle" fill="var(--tx)" font-size="15" font-weight="600">${fmt(tot)}</text><text x="80" y="94" text-anchor="middle" fill="var(--mut)" font-size="10">${unit||(st.by=='value'?'total':st.by)}</text></svg><ul class="lg">${items.filter(x=>x.v>0).map(x=>`<li><i style="background:${x.color}"></i>${esc(x.label)}<b>${fmt(x.v)} <span class="m">${(x.v/tot*100).toFixed(0)}%</span></b></li>`).join('')}</ul></div>`}
 function renderStats(){
  if(!lib.length)return;const rows=statRows(),m=r=>st.by=='copies'?r.q:st.by=='unique'?1:r.v;
  const copies=rows.reduce((a,r)=>a+r.q,0),val=rows.reduce((a,r)=>a+r.v,0),foils=[...foilN.values()].reduce((a,b)=>a+b,0),sets=new Set(rows.flatMap(r=>r.sets)),top=rows.slice().sort((a,b)=>b.v-a.v)[0];
