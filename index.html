@@ -85,7 +85,7 @@ dialog{background:var(--panel);color:var(--tx);border:1px solid var(--line);bord
 .lg{list-style:none;padding:0;margin:8px 0;font-size:13px}.lg li{display:flex;gap:8px;align-items:center;padding:2px 0}.lg i{width:10px;height:10px;border-radius:2px;flex:none}.lg b{margin-left:auto;font-weight:600}
 .pb{height:8px;background:#0f1815;border-radius:4px;overflow:hidden;flex:1;min-width:60px}.pb i{display:block;height:100%;background:var(--gold);border-radius:4px}
 .hb{display:flex;align-items:center;gap:10px;padding:3px 0}.hb>span{flex:0 0 38%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.hb>b{flex:none;font-weight:600;font-size:13px}
-.sc{padding:6px 0;border-bottom:1px solid var(--line)}.sc>button{padding:3px 9px;font-size:12px;margin-top:4px}.smiss{margin-top:6px}
+.sc{padding:6px 0;border-bottom:1px solid var(--line)}.sc .tools{margin:4px 0 0}.sc .tools button{padding:3px 9px;font-size:12px}.smiss{margin-top:6px}
 @media(max-width:600px){.hb>span{flex-basis:30%}}
 [hidden]{display:none!important}
 </style></head><body>
@@ -1230,7 +1230,7 @@ async function renderSets(){
  L.sort(st.sort=='pct'?(a,b)=>b.pct-a.pct||b.own-a.own:st.sort=='own'?(a,b)=>b.own-a.own:(a,b)=>b.date.localeCompare(a.date));
  const shown=st.all?L:L.slice(0,25);
  el.innerHTML=`<div class="chips">${[['pct','Most complete'],['own','Most owned'],['new','Newest']].map(([k,l])=>`<button class="chip wide" data-ssort="${k}" aria-pressed="${st.sort==k}">${l}</button>`).join('')}<label class="m"><input type="checkbox" id="stmin" ${st.min?'checked':''}> Hide sets where I own fewer than 5 cards${hid?` (${hid} hidden)`:''}</label></div>`
-  +(shown.length?shown.map(x=>`<div class="sc"><div class="hb"><span>${esc(x.name)} <span class="m">${x.code}</span></span><div class="pb" role="progressbar" aria-valuenow="${Math.round(x.pct*100)}" aria-valuemin="0" aria-valuemax="100" aria-label="${esc(x.name)} completion"><i style="width:${x.pct*100}%"></i></div><b>${x.exact?'':'~'}${x.own} / ${x.size} <span class="m">${Math.round(x.pct*100)}%</span></b></div><button class="alt" data-smiss="${x.code}">${setOpen.has(x.code)?'Hide missing cards':"See what's missing"}</button><div id="sm-${x.code}" class="smiss">${setOpen.get(x.code)||''}</div></div>`).join(''):'<p class="m">No sets to show yet.</p>')
+  +(shown.length?shown.map(x=>`<div class="sc"><div class="hb"><span>${esc(x.name)} <span class="m">${x.code}</span></span><div class="pb" role="progressbar" aria-valuenow="${Math.round(x.pct*100)}" aria-valuemin="0" aria-valuemax="100" aria-label="${esc(x.name)} completion"><i style="width:${x.pct*100}%"></i></div><b>${x.exact?'':'~'}${x.own} / ${x.size} <span class="m">${Math.round(x.pct*100)}%</span></b></div><div class="tools"><button class="alt" data-sview="${enc(x.name)}">View my cards from this set</button><button class="alt" data-smiss="${x.code}">${setOpen.has(x.code)?'Hide missing cards':"See what's missing"}</button></div><div id="sm-${x.code}" class="smiss">${setOpen.get(x.code)||''}</div></div>`).join(''):'<p class="m">No sets to show yet.</p>')
   +(L.length>25?`<div class="tools"><button class="alt" data-sall>${st.all?'Show fewer':'Show all '+L.length+' sets'}</button></div>`:'')
   +`<p class="m">Each set is counted from its full card list on Scryfall (basic lands excluded), and only cards you own in that set's own printing count. A card you own as a reprint from another set doesn't count here.${failed?` A "~" means the full list couldn't be loaded, so that total is an estimate.`:''}${unk.length?` ${unk.length} set name${unk.length==1?'':'s'} from your file couldn't be matched (promos, tokens or special products).`:''}</p>`}
 async function showMissing(code){
@@ -1242,6 +1242,7 @@ async function showMissing(code){
   renderSets()}catch(e){box.innerHTML='<span class="m">Could not load that set. Check your connection.</span>'}}
 $('#tool-stats').addEventListener('click',e=>{const d=e.target.dataset||{};
  if(d.by){st.by=d.by;renderStats()}else if(d.ssort){st.sort=d.ssort;renderSets()}else if(d.sall!==undefined){st.all=!st.all;renderSets()}else if(d.smiss)showMissing(d.smiss)
+ else if(d.sview){const nm=decodeURIComponent(d.sview);openTool('cmd');Object.keys(RB).forEach(k=>flt.r[k]=[...RB[k]]);flt.types=new Set();flt.cols=new Set();flt.mode='within';flt.set=nm;flt.rar='';$('#gsearch').value='';syncBars();renderG();$('#s5').scrollIntoView({behavior:'smooth'})}
  else if(e.target.id=='stmin'){st.min=e.target.checked;renderSets()}});
 
 // ---------- wiring ----------
