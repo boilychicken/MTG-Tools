@@ -183,7 +183,7 @@ dialog{background:var(--panel);color:var(--tx);border:1px solid var(--line);bord
 <input type="text" id="dset" list="dsetlist" placeholder="Type a set name or code, e.g. Lorwyn Eclipsed" aria-label="Set you are drafting" autocomplete="off">
 <datalist id="dsetlist"></datalist>
 <div class="m" id="dsetmsg" role="status"></div>
-<input type="search" id="dq" placeholder="Search this set by name, type or text" aria-label="Search this set" disabled style="margin-top:6px">
+<input type="search" id="dq" placeholder="Search this set by name, type or text" aria-label="Search this set" disabled style="margin-top:6px"><label class="m">Sort by <select id="dsort" aria-label="Sort set cards by"></select></label>
 <div class="m" id="dmsg" role="status"></div>
 <div class="list" id="dres"></div>
 <h4>Or paste a list</h4>
@@ -208,6 +208,7 @@ dialog{background:var(--panel);color:var(--tx);border:1px solid var(--line);bord
 <div class="panel"><h2>2. Build-around cards <span class="m" id="scnt"></span></h2>
 <p class="m">Use − and + to set copies (max 4). ✕ removes the card.</p>
 <div class="list" id="sba"></div>
+<h4>Colours for the auto-build (optional)</h4><p class="m">Pick one or more to keep the automatically chosen cards to those colours. Your build-around cards always stay. Leave all off to let the builder choose.</p><div class="chips" id="scols" role="group" aria-label="Deck colours"></div>
 <div class="tools"><button id="sbuild">Build 60-card deck</button><button class="alt" id="sclear">Clear</button></div></div>
 </section>
 <section class="panel" id="sout" hidden></section>
@@ -566,7 +567,23 @@ function passes(c){
   if(m=='all')return[...sel].every(x=>cs.includes(x));
   return cs.length==sel.size&&cs.every(x=>sel.has(x))}
  return true}
-const sorter=m=>m=='mv'?(a,b)=>a.cmc-b.cmc||a.n.localeCompare(b.n):m=='syn'&&cmd?(a,b)=>score(b)-score(a)||a.cmc-b.cmc||a.n.localeCompare(b.n):(a,b)=>a.n.localeCompare(b.n);
+const RARK={mythic:0,rare:1,uncommon:2,common:3},TYK=['Creature','Planeswalker','Instant','Sorcery','Artifact','Enchantment','Land'];
+const SORTS=[['name','Name A\u2013Z'],['named','Name Z\u2013A'],['mv','Mana value, low to high'],['mvd','Mana value, high to low'],['pw','Power, high to low'],['tg','Toughness, high to low'],['price','Price, high to low'],['pricea','Price, low to high'],['rar','Rarity, rarest first'],['own','Copies owned, most first'],['type','Card type'],['col','Colour'],['pop','Popularity (EDHREC)'],['syn','Synergy with commander']];
+const sortOpts=(extra)=>SORTS.filter(x=>!(extra&&extra.includes(x[0]))).map(([k,l])=>`<option value="${k}">${l}</option>`).join('');
+const sorter=m=>{const nm=(a,b)=>a.n.localeCompare(b.n),by=f=>(a,b)=>f(a)-f(b)||nm(a,b),st=v=>v===''||v==null?1e3:-num(v);
+ const col=c=>c.ci.length==1?'WUBRG'.indexOf(c.ci[0]):c.ci.length>1?5:6;
+ switch(m){
+  case'named':return(a,b)=>nm(b,a);
+  case'mv':return by(c=>c.cmc);case'mvd':return by(c=>-c.cmc);
+  case'pw':return by(c=>st(c.pw));case'tg':return by(c=>st(c.tg));
+  case'price':return by(c=>-(+c.p||0));case'pricea':return by(c=>c.p?+c.p:1e9);
+  case'rar':return by(c=>Math.min(4,...[...metaOf(c).rars].map(r=>RARK[r]??4)));
+  case'own':return by(c=>-(qty.get(c.n)||0));
+  case'type':return by(c=>{const i=TYK.indexOf(tyOf(c));return i<0?9:i});
+  case'col':return by(col);
+  case'pop':return by(c=>c.er>0?c.er:1e9);
+  case'syn':if(cmd)return(a,b)=>score(b)-score(a)||a.cmc-b.cmc||nm(a,b);
+ }return nm}
 const rangeHtml=k=>`<div><div class="dual"><div class="track"></div><div class="fill"></div><input type="range" data-r="${k}" data-end="min" aria-label="Minimum ${RL[k].toLowerCase()}"><input type="range" data-r="${k}" data-end="max" aria-label="Maximum ${RL[k].toLowerCase()}"></div><div class="m" data-lab="${k}"></div></div>`;
 const barHtml=()=>`<details class="fdet" open><summary>Filters and sorting</summary><div class="fin">
 <div class="sl">${Object.keys(RL).map(rangeHtml).join('')}</div>
@@ -574,7 +591,7 @@ const barHtml=()=>`<details class="fdet" open><summary>Filters and sorting</summ
 <div class="chips">${COLS.map(([k,n])=>`<button class="chip c${k}" data-col="${k}" aria-pressed="false" aria-label="${n}" title="${n}">${k}</button>`).join('')}
 <select data-f="mode" aria-label="How colours are matched"><option value="within">Within these colours</option><option value="any">Includes any</option><option value="all">Includes all</option><option value="exact">Exactly these</option></select></div>
 <div class="chips"><select data-f="set" aria-label="Set"><option value="">All sets</option></select><select data-f="rar" aria-label="Rarity"><option value="">All rarities</option></select>
-<select data-f="sort" aria-label="Sort by"><option value="name">Name A\u2013Z</option><option value="mv">Mana value</option><option value="syn">Synergy</option></select>
+<select data-f="sort" aria-label="Sort by">${sortOpts()}</select>
 <button class="alt" data-f="reset">Reset filters</button></div></div></details>`;
 function fillOpts(){const ss=new Set(),rs=new Set();lib.forEach(c=>{const m=metaOf(c);m.sets.forEach(x=>ss.add(x));m.rars.forEach(x=>rs.add(x))});
  const ro=['common','uncommon','rare','mythic'],rl=[...ro.filter(x=>rs.has(x)),...[...rs].filter(x=>!ro.includes(x)).sort()];
@@ -717,6 +734,7 @@ function buildCore(ents,cfg){
   const val=e=>limVal(e.c)+.5*ev(e.c).s+(e.lock?100:0)-(e.k||0)*cfg.decay;
   const nonL=ents.filter(e=>tyOf(e.c)!='Land'),all='WUBRG',need=new Set(lk.flatMap(e=>e.c.ci)),k=need.size>2?3:2,combos=[];
   const rec=(i,cur)=>{if(cur.length==k){if([...need].every(x=>cur.includes(x)))combos.push(new Set(cur));return}for(let j=i;j<5;j++)rec(j+1,[...cur,all[j]])};rec(0,[]);
+  if(cfg.colors&&cfg.colors.size){combos.length=0;combos.push(new Set([...cfg.colors,...need]))}
   let best=null;combos.forEach(S=>{const fit=nonL.filter(e=>e.c.ci.every(x=>S.has(x))).sort((a,b)=>val(b)-val(a)).slice(0,cfg.N),t=fit.reduce((a,e)=>a+Math.max(0,val(e)),0);if(!best||t>best.t)best={S,t}});
   const S=best.S,cand=nonL.filter(e=>e.c.ci.every(x=>S.has(x))).sort((a,b)=>val(b)-val(a));
   const cnt=Array(6).fill(0),B=c=>Math.min(6,Math.max(1,Math.floor(c.cmc)))-1,isC=c=>/Creature/.test(c.t.split(' // ')[0]),pick=[];let nc=0;
@@ -757,11 +775,13 @@ async function chooseSet(){const v=$('#dset').value.trim();if(!v)return;const m=
  const k=dsets.find(x=>x.code==code)||dsets.find(x=>x.name.toLowerCase()==v.toLowerCase());loadSetCards(k?k.code:code)}
 async function initDraft(){renderDraft();await loadSets();
  if(!dcode){const c=await idb.get('dset');if(c){const k=dsets.find(x=>x.code==c);$('#dset').value=k?`${k.name} (${k.code})`:c;loadSetCards(c)}}}
-function dsearch(){const terms=parseQ($('#dq').value),r=dcards.filter(c=>matches(c,terms)).sort((a,b)=>a.n.localeCompare(b.n));dres=r.slice(0,60);
+function dsearch(){const terms=parseQ($('#dq').value),r=dcards.filter(c=>matches(c,terms)).sort(sorter($('#dsort').value||'name'));dres=r.slice(0,60);
  $('#dmsg').textContent=dcards.length?`${r.length} card${r.length==1?'':'s'}${r.length>60?', showing 60. Narrow your search to see the rest.':''}`:'Choose a set first.';renderDraft()}
 
 // ---------- 60-card builder ----------
-let ba=new Map(),sres=[],sout=null;
+let ba=new Map(),sres=[],sout=null,sCols=new Set();
+function renderSCols(){$('#scols').innerHTML=COLS.filter(([k])=>k!='C').map(([k,n])=>`<button class="chip c${k}" data-scol="${k}" aria-pressed="${sCols.has(k)}" aria-label="${n}" title="${n}">${k}</button>`).join('')}
+$('#scols').addEventListener('click',e=>{const k=e.target.dataset&&e.target.dataset.scol;if(!k)return;sCols.has(k)?sCols.delete(k):sCols.add(k);renderSCols()});renderSCols();
 const sMax=c=>Math.min(4,qty.get(c.n)||1);
 function ssearch(){const terms=parseQ($('#sq').value),f=$('#sfmt').value,on=active(terms)||!!f;
  const r=on?lib.filter(c=>(!f||(c.fm||'').includes(f))&&!/Basic/.test(c.t)&&passes(c)&&matches(c,terms)).sort(sorter(flt.sortT)):[];sres=r.slice(0,100);
@@ -772,10 +792,10 @@ function renderSixty(){
  $('#sba').innerHTML=[...ba.values()].map(o=>`<div class="row" data-n="${enc(o.c.n)}"><span>${o.c.n}<br><span class="m">${o.c.t.split(' // ')[0]} \u00b7 own ${qty.get(o.c.n)||1}</span></span><span class="c">${o.c.mc}<button class="info" data-sdec="${enc(o.c.n)}" aria-label="Fewer copies of ${o.c.n}">\u2212</button> ${o.n} <button class="info" data-sinc="${enc(o.c.n)}" aria-label="More copies of ${o.c.n}">+</button><button class="info" data-srm="${enc(o.c.n)}" aria-label="Remove ${o.c.n}">\u2715</button></span></div>`).join('')||'<p class="m">Nothing chosen yet. Search on the left and click the cards you want the deck built around.</p>';
  const el=$('#sout');el.hidden=!sout;if(sout)el.innerHTML=deckHtml(sout,'Your 60-card deck',36,n=>ba.has(n))}
 async function buildSixty(){
- if(!ba.size){$('#smsg').textContent='Pick at least one card to build around first.';return}
+ if(!ba.size&&!sCols.size){$('#smsg').textContent='Pick at least one card to build around, or choose a colour, first.';return}
  await loadTypes();const f=$('#sfmt').value,ents=[];
  lib.forEach(c=>{if(/Basic/.test(c.t)||(f&&!(c.fm||'').includes(f)))return;const b=ba.get(c.n),n=b?Math.min(b.n,sMax(c)):Math.min(sMax(c),/Legendary/.test(c.t.split(' // ')[0])?2:4);for(let k=0;k<n;k++)ents.push({c,lock:!!b,k})});
- sout=buildCore(ents,{N:36,total:60,caps:[9,11,9,7,4,3],minCre:12,decay:1.6,nbl:6,noSide:true});renderSixty();$('#sout').scrollIntoView({behavior:'smooth'})}
+ sout=buildCore(ents,{N:36,total:60,caps:[9,11,9,7,4,3],minCre:12,decay:1.6,nbl:6,noSide:true,colors:sCols});renderSixty();$('#sout').scrollIntoView({behavior:'smooth'})}
 $('#tool-sixty').addEventListener('click',e=>{if(e.target.closest('[data-info]')&&!e.target.dataset.sdec&&!e.target.dataset.sinc&&!e.target.dataset.srm)return;
  const d=e.target.dataset||{},dn=k=>decodeURIComponent(d[k]);
  if(d.sdec||d.sinc||d.srm){const n=dn(d.sdec?'sdec':d.sinc?'sinc':'srm'),o=ba.get(n);if(d.srm||(d.sdec&&o.n<=1))ba.delete(n);else o.n=Math.max(1,Math.min(sMax(o.c),o.n+(d.sinc?1:-1)));renderSixty();return}
@@ -802,7 +822,7 @@ $('#tool-draft').addEventListener('click',e=>{if(e.target.closest('[data-info]')
  else if(e.target.dataset.save!==undefined)openSave(dText(dout),'40','','Draft deck'+(dcode?' - '+dcode:''));
  else if(e.target.dataset.chk!==undefined)chkLoad(dText(dout),'40');
  else if(e.target.dataset.dl!==undefined){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([dText(dout)],{type:'text/plain'}));a.download='draft-deck.txt';a.click()}});
-$('#dq').oninput=dsearch;$('#dset').onchange=chooseSet;$('#dset').onkeydown=e=>{if(e.key=='Enter')chooseSet()};
+$('#dsort').innerHTML=sortOpts(['own','syn']);$('#dsort').onchange=dsearch;$('#dq').oninput=dsearch;$('#dset').onchange=chooseSet;$('#dset').onkeydown=e=>{if(e.key=='Enter')chooseSet()};
 $('#dimp').onclick=dimport;$('#dbuild').onclick=buildDraft;
 $('#dclear').onclick=()=>{dpool=new Map();dout=null;savePool();renderDraft()};
 document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-tool]');if(t&&!t.disabled)openTool(t.dataset.tool)});
