@@ -162,7 +162,7 @@ dialog{background:var(--panel);color:var(--tx);border:1px solid var(--line);bord
 
 <section class="panel" id="s2" hidden>
 <h2>Choose a commander</h2>
-<div class="csrow"><input type="search" id="csearch" placeholder="Search your legendary creatures" aria-label="Search commanders"><select id="csort" aria-label="Sort commanders"><option value="az">A–Z</option><option value="fit">Best fit for my collection</option><option value="pop">Most popular first</option></select></div><p class="m" id="popNote"></p>
+<div class="csrow"><input type="search" id="csearch" placeholder="Search your legendary creatures" aria-label="Search commanders"><select id="csort" aria-label="Sort commanders"><option value="az">A–Z</option><option value="fit">Best fit for my collection</option><option value="pop">Most decks</option><option value="rate">Decks per year since first printed</option><option value="old">Oldest first</option></select></div><p class="m" id="popNote"></p>
 <div class="grid" id="clist"></div>
 </section>
 
@@ -371,14 +371,36 @@ function fitOf(c){const d=popData&&popData[c.n];if(!d||!d.c||!d.c.length)return 
  if(fitCache.has(c.n))return fitCache.get(c.n);
  const own=ownedSet();let tot=0,have=0,n=0;d.c.forEach(([nm,p])=>{tot+=p;if(own.has(nm.split(' // ')[0].toLowerCase())||own.has(nm.toLowerCase())){have+=p;n++}});
  const r={pct:Math.round(100*have/tot),n,of:d.c.length};fitCache.set(c.n,r);return r}
+// When each commander was first printed. The weekly job writes it into the popularity file (field d); without it, Scryfall is asked once and the answer is kept in this browser.
+let firstMap=new Map(),firstTried=false,firstBusy=false;
+try{firstMap=new Map(Object.entries(JSON.parse(localStorage.getItem('mtg-first')||'{}')))}catch(e){}
+const firstOf=c=>(popData&&popData[c.n]&&popData[c.n].d)||firstMap.get(c.n)||null;
+async function loadFirst(){if(firstBusy||firstTried)return;
+ const need=lib.filter(c=>isCmdr(c)&&!firstOf(c));if(!need.length)return;
+ firstBusy=true;firstTried=true;
+ try{for(let i=0;i<need.length;i+=12){const chunk=need.slice(i,i+12),byFront=new Map(chunk.map(c=>[c.n.split(' // ')[0].toLowerCase(),c.n]));
+   const q='('+chunk.map(c=>'!"'+c.n.split(' // ')[0].replace(/"/g,'')+'"').join(' or ')+') game:paper';
+   let url='https://api.scryfall.com/cards/search?unique=prints&order=released&dir=asc&q='+encodeURIComponent(q),pages=0;
+   while(url&&pages++<8){const r=await fetch(url,{headers:{Accept:'application/json'}});if(!r.ok)break;const j=await r.json();
+    (j.data||[]).forEach(x=>{const k=(x.name||'').split(' // ')[0].toLowerCase(),n=byFront.get(k);if(n&&x.released_at&&!firstMap.has(n))firstMap.set(n,x.released_at)});
+    url=j.has_more?j.next_page:null;await sleep(120)}
+   await sleep(120)}
+  try{localStorage.setItem('mtg-first',JSON.stringify(Object.fromEntries(firstMap)))}catch(e){}}
+ catch(e){}
+ firstBusy=false;if(!$('#tool-cmd').hidden)showCmds()}
+const yrsOld=c=>{const d=firstOf(c);return d?Math.max(1,(Date.now()-Date.parse(d))/(365.25*864e5)):null};
 function showCmds(){
  loadPop();ownFront=null;fitCache.clear();
  const q=$('#csearch').value.toLowerCase(),by=$('#csort').value;
- const key=c=>by=='fit'?(fitOf(c)?fitOf(c).pct:-1):by=='pop'?(popOf(c)||0):0;
- const l=lib.filter(c=>isCmdr(c)&&c.n.toLowerCase().includes(q)).sort((a,b)=>by!='az'&&popData?(key(b)-key(a)||(popOf(b)||0)-(popOf(a)||0)||a.n.localeCompare(b.n)):a.n.localeCompare(b.n));
- $('#popNote').textContent=popData?'Deck counts and usual cards come from EDHREC, which gathers public deck lists from Moxfield, Archidekt and other sites. “You own” is the share of the cards people most often play with that commander that are in your collection, weighted by how often each is played.':'';
- $('#clist').innerHTML=l.length?l.map(c=>{const pp=popOf(c),ft=fitOf(c);
-  return `<button class="cmd" data-c="${enc(c.n)}"><img src="${c.img}" alt=""><span>${c.n}<br><span class="m">${c.ci.join('')||'Colourless'}${pp!=null?' · '+(pp?fmtN(pp)+' decks':'no decks listed'):''}</span>${ft?`<br><span class="m"><b>You own ${ft.pct}%</b> of the usual cards (${ft.n} of ${ft.of})</span>`:''}</span></button>`}).join(''):'<p class="m">No legal commanders found in your collection.</p>';
+ if(by=='old'||by=='rate')loadFirst();
+ const rk=c=>c.er>0?c.er:null,perYr=c=>{const d=popOf(c),y=yrsOld(c);return d!=null&&y?d/y:null},
+  key=c=>by=='fit'?(fitOf(c)?fitOf(c).pct:-1):by=='pop'?(popOf(c)!=null?popOf(c):rk(c)?1e6-rk(c):0):by=='rate'?(perYr(c)??-1):by=='old'?(firstOf(c)?-Date.parse(firstOf(c)):-1e15):0;
+ const l=lib.filter(c=>isCmdr(c)&&c.n.toLowerCase().includes(q)).sort((a,b)=>by!='az'?(key(b)-key(a)||a.n.localeCompare(b.n)):a.n.localeCompare(b.n));
+ $('#popNote').textContent=(popData?'Deck counts and usual cards come from EDHREC, which gathers public deck lists from Moxfield, Archidekt and other sites. “You own” is the share of the cards people most often play with that commander that are in your collection, weighted by how often each is played.':'Showing EDHREC’s popularity rank (1 is the most played). Exact deck counts and “You own” percentages appear once the weekly commander job has run (see SETUP.md).')
+  +(by=='rate'?(popData?' “Decks per year” divides each commander’s deck count by the years since it was first printed, so a card from 2017 is not simply beaten by one that has had a few months to collect decks (anything under a year old counts as one year). Commanders with no known date or deck count come last.':' “Decks per year” needs deck counts, which appear once the weekly commander job has run.'):by=='old'?' Sorted by the year each commander was first printed.':'')
+  +(firstBusy?' Looking up first-printing dates…':'');
+ $('#clist').innerHTML=l.length?l.map(c=>{const pp=popOf(c),ft=fitOf(c),fd=firstOf(c),py=perYr(c);
+  return `<button class="cmd" data-c="${enc(c.n)}"><img src="${c.img}" alt=""><span>${c.n}<br><span class="m">${c.ci.join('')||'Colourless'}${pp!=null?' · '+(pp?fmtN(pp)+' decks':'no decks listed'):(c.er>0?' · EDHREC rank #'+fmtN(c.er):'')}${fd?' · first printed '+fd.slice(0,4):''}${by=='rate'&&py!=null?' · about '+fmtN(Math.round(py))+' decks a year':''}</span>${ft?`<br><span class="m"><b>You own ${ft.pct}%</b> of the usual cards (${ft.n} of ${ft.of})</span>`:''}</span></button>`}).join(''):'<p class="m">No legal commanders found in your collection.</p>';
 }
 $('#csort').onchange=showCmds;
 // The creature-type list is only fetched during an import, so after a reload it is empty until something asks for it.
@@ -403,13 +425,13 @@ function cat(c){
 // d: detects the keyword/mechanic in the commander's text. w: [pattern in a card's text, weight]. big: bonus for high-power creatures. agg: wants an aggressive creature-heavy deck. q: Scryfall query for upgrade candidates.
 const P=(n,d,w,o={})=>({n,d,w,...o});
 const PROFILES=[
-P('goad',/\bgoad/,[[/\bgoad/,6],[/attacks? each (combat|turn) if able|must attack|attack each combat/,4],[/gain control of (target|each|all|up to)/,4],[/additional combat|extra combat/,5],[/\btrample\b|\bhaste\b/,2],[/whenever (a|another|one or more) creatures?[^.]{0,30}attacks?/,2],[/can't block|must be blocked/,2],[/each opponent|each other player/,1.5],[/gets? \+\d+\/\+\d+|\+x\/\+x|double[^.]{0,20}power/,1.5]],{big:3,agg:1,q:'(o:goad or o:"additional combat" or o:"gain control of target creature" or (t:creature pow>=6 (o:trample or o:haste)))'}),
+P('goad',/\bgoad/,[[/\bgoad/,6],[/attacks? each (combat|turn) if able|must attack|attack each combat/,4],[/gain control of (target|each|all|up to)/,4],[/additional combat|extra combat/,5],[/\btrample\b|\bhaste\b/,2],[/whenever (a|another|one or more) creatures?[^.]{0,30}attacks?/,2],[/can't block|must be blocked/,2],[/each opponent|each other player/,1.5],[/gets? \+\d+\/\+\d+|\+x\/\+x|double[^.]{0,20}power/,1.5]],{mp:true,big:3,agg:1,q:'(o:goad or o:"additional combat" or o:"gain control of target creature" or (t:creature pow>=6 (o:trample or o:haste)))'}),
 P('trample',/\btrample\b/,[[/\btrample\b/,2],[/\+\d+\/\+\d+|\+x\/\+x|double[^.]{0,20}power/,3],[/\+1\/\+1 counter/,2],[/additional combat/,3],[/deals combat damage to (a|an|that) (player|opponent)/,2],[/equal to its power|greatest power/,2]],{big:3,agg:1,q:'(t:creature pow>=6 o:trample)'}),
 P('haste',/\bhaste\b/,[[/\bhaste\b/,3],[/additional combat/,4],[/whenever[^.]{0,30}attacks/,2],[/\+\d+\/\+\d+/,1]],{big:1.5,agg:1,q:'(o:haste (o:"creatures you control" or o:"additional combat"))'}),
 P('attack',/whenever [^.]{0,60}\battacks?\b|\battacking\b/,[[/whenever[^.]{0,40}attacks/,3],[/additional combat/,4],[/\bhaste\b|\bvigilance\b/,1.5],[/attacking creatures? (get|have)|each attacking/,3],[/\+\d+\/\+\d+/,1]],{big:1,agg:1,q:'(o:"attacking creatures" or o:"additional combat" or o:"whenever a creature you control attacks")'}),
 P('flying',/\bflying\b/,[[/\bflying\b/,2],[/creatures you control (have|gain) flying|gains? flying/,4],[/\+\d+\/\+\d+/,1],[/\breach\b/,0.5]],{q:'(o:"creatures you control have flying" or o:"gains flying" or o:"whenever a creature you control with flying")'}),
 P('deathtouch',/deathtouch/,[[/deathtouch/,3],[/deals damage equal to its power|fights? /,2],[/\{t\}: [^.]*deals? \d+ damage/,2],[/first strike/,1]],{big:0.5,q:'(o:deathtouch (o:"creatures you control" or t:equipment) or o:"deals damage equal to its power")'}),
-P('lifelink',/lifelink|whenever you gain life|gain \d+ life/,[[/lifelink/,3],[/whenever you gain life/,4],[/gain (\d+|x|that much) life|gains? life/,2],[/life total/,1]],{big:1,q:'(o:lifelink o:"creatures you control" or o:"whenever you gain life")'}),
+P('lifegain',/lifelink|whenever you gain life|gains? (\d+|x|that much) life|gains? life/,[[/lifelink/,3],[/whenever you gain life/,4],[/gain (\d+|x|that much) life|gains? life/,2],[/life total/,1]],{big:1,q:'(o:lifelink o:"creatures you control" or o:"whenever you gain life")'}),
 P('menace',/\bmenace\b/,[[/\bmenace\b/,3],[/can't block|can't be blocked/,3],[/creatures you control get \+/,3]],{big:1,agg:1,q:'(o:menace o:"creatures you control" or o:"can\'t block")'}),
 P('strike',/double strike|first strike/,[[/double strike/,4],[/first strike/,2],[/\+x\/\+0|\+\d+\/\+0|double[^.]{0,20}power/,3],[/\bequipped creature\b/,1]],{big:2,agg:1,q:'((o:"double strike" or o:"first strike") (o:"creatures you control" or t:equipment))'}),
 P('vigilance',/\bvigilance\b/,[[/\bvigilance\b/,3],[/untap (all|each|target)/,2],[/whenever[^.]{0,30}attacks/,2]],{big:1.5,q:'(o:vigilance o:"creatures you control" or o:"untap all creatures")'}),
@@ -438,10 +460,15 @@ P('tap',/\bis tapped\b|\bbecomes? tapped\b|\bwhile tapped\b/,[[/tap an untapped 
 P('power',/\bpower (greater|is|of|equal)|\bbase power\b|equal to (its|their|that creature's) power|double[^.]{0,20}power|\bgreatest power\b/,[[/\+\d+\/\+\d+|\+x\/\+[0x]/,3],[/equipped creature gets|enchanted creature gets|creatures you control get \+|other creatures you control get \+/,2.5],[/double[^.]{0,20}power|power equal|twice (its|their) power/,3],[/\bproliferate\b|\+1\/\+1 counter/,2]],{big:2,q:'(o:"creatures you control get" or (t:equipment o:"equipped creature gets") or (t:aura o:"enchanted creature gets"))'}),
 P('mana',/unspent mana|mana pool|\bdouble[^.]{0,25}mana|twice that much|\badd \{[a-z0-9]\}|\badd (one|two|three|x) mana|mana (doesn't|don't) empty/,[[/\badd \{|\badd (one|two|three|x|an additional)[^.]{0,20}mana|adds? an additional/,2.5],[/twice that much|double[^.]{0,25}mana|for each mana/,4],[/\{x\}|where x is|\bx is\b/,1.5],[/untap (target|all|each|up to)[^.]{0,30}(land|permanent)/,2],[/unspent mana|mana (doesn't|don't) empty|don't lose/,3]],{ramp:13,q:'(o:"twice that much" or o:"unspent mana" or (o:double o:mana))'}),
 P('voltron',/\battached to ~|\b(auras?|equipment) (and|or) (auras?|equipment)\b|\beach (aura|equipment)\b/,[[/\bequip \{|equip cost|reconfigure|\bequip\b/,3],[/attach(es)? (target|it|that|this)|attached to (target|a|that)/,3],[/hexproof|indestructible|protection from|\bward\b/,2],[/equipped creature|enchanted creature/,2],[/double strike|additional combat|\btrample\b/,1.5]],{q:'(o:"equipped creature" or o:"enchanted creature" or o:reconfigure)'}),
+P('donate',/(opponents?|players?) gains? control|exchange control/,[[/(target|an?|each|chosen) (opponent|player)s? gains? control|gains? control of (target|that|this)[^.]*you (control|own)|exchange control/,6],[/(its|their|that creature's|that permanent's|enchanted (creature|permanent)'s) controller (loses|sacrifices|discards|must)|at the beginning of (your|each|the) upkeep[^.]*(sacrifice|lose|discard)/,3],[/\bgoad\b|can't attack you/,1.5]],{q:'(o:"target player gains control" or o:"target opponent gains control" or (o:"gains control of target" o:"you control"))'}),
+P('cascade',/\bcascade\b|\bdiscover\b/,[[/\bcascade\b|\bdiscover (\d|x)/,6],[/without paying (its|their) mana cost/,3],[/exile cards? from the top of your library until/,3],[/(spells?|cards?) you cast (have|with|from)|cast [^.]*from (exile|the top)/,1.5]],{q:'(o:cascade or o:discover)'}),
+P('drain',/each opponent loses|each opponent[^.]{0,40}loses|opponents lose\b|whenever (an opponent|a player|you) loses? life|\bdrains?\b/,[[/each opponent loses|opponents lose\b|drain/,4],[/whenever (an opponent|a player|you|each opponent) loses? life|loses? life this turn/,4],[/gain (\d+|x|that much|life equal)|gains? life/,2],[/each opponent|each other player/,1]],{q:'(o:"each opponent loses" or o:"whenever an opponent loses life")'}),
+P('bigspells',/(?:mana value|converted mana cost)\s*(?:of\s*)?\d+\s*or\s*(?:greater|more)|(?:its|that card's|their) mana value/,[[/./,0]],{mv:'ge',ramp:13,lab:()=>'Spells costing '+mvRule.n+'+'}),
+P('cheapspells',/(?:mana value|converted mana cost)\s*(?:of\s*)?\d+\s*or\s*(?:less|fewer|lower)/,[[/./,0]],{mv:'le',lab:()=>'Spells costing '+mvRule.n+' or less'}),
 P('vehicles',/\bcrew\b|vehicle/,[[/\bcrew\b|vehicle/,4],[/artifact/,1]],{q:'(o:crew or t:vehicle)'})
 ];
 // Types the commander cares about (e.g. "artifact creatures you control get +2/+2"): reward cards of that type.
-const TYPEF=[['creature',/\bcreature spells?\b/,/Creature/],['artifact',/\bartifacts?\b/,/Artifact/],['enchantment',/\benchantments?\b/,/Enchantment/],['legendary',/\blegendary\b/,/Legendary/],['equipment',/\bequipment\b/,/Equipment/],['aura',/\bauras?\b/,/Aura/],['vehicle',/\bvehicles?\b/,/Vehicle/],['planeswalker',/\bplaneswalkers?\b/,/Planeswalker/],['saga',/\bsagas?\b/,/Saga/],['instant',/\binstants?\b/,/Instant/],['sorcery',/\bsorcer(y|ies)\b/,/Sorcery/]].map(([n,d,ty])=>({n,d,ty}));
+const TYPEF=[['creature',/\bcreature spells?\b|reveal[^.]*\bcreature cards?\b/,/Creature/],['artifact',/\bartifacts?\b/,/Artifact/],['enchantment',/\benchantments?\b/,/Enchantment/],['legendary',/\blegendary\b/,/Legendary/],['equipment',/\bequipment\b/,/Equipment/],['aura',/\bauras?\b/,/Aura/],['vehicle',/\bvehicles?\b/,/Vehicle/],['planeswalker',/\bplaneswalkers?\b/,/Planeswalker/],['saga',/\bsagas?\b/,/Saga/],['instant',/\binstants?\b/,/Instant/],['sorcery',/\bsorcer(y|ies)\b/,/Sorcery/]].map(([n,d,ty])=>({n,d,ty}));
 let typeFocus=[];
 function setFocus(){const txt=cmd.o.toLowerCase().split(/\n|\.\s/).filter(x=>!/\b(destroy|exile|counter)\b[^.]*\btarget\b/.test(x)).join('. ');
  const nt=txt.replace(/creates?[^.\n]*tokens?/g,'');
@@ -449,11 +476,19 @@ function setFocus(){const txt=cmd.o.toLowerCase().split(/\n|\.\s/).filter(x=>!/\
 async function loadTypes(){if(types.length)return;try{const c=localStorage.getItem('mtg-types');if(c){types=JSON.parse(c);return}const r=await fetch('https://api.scryfall.com/catalog/creature-types');types=(await r.json()).data||[];localStorage.setItem('mtg-types',JSON.stringify(types))}catch(e){}}
 function tribeRe(t){const v=[t,t+'s',t+'es'];if(/f$/.test(t))v.push(t.replace(/f$/,'ves'));if(/fe$/.test(t))v.push(t.replace(/fe$/,'ves'));if(/y$/.test(t))v.push(t.replace(/y$/,'ies'));return new RegExp('\\b('+v.map(x=>x.replace(/[^a-z]/g,'.?')).join('|')+')\\b','i')}
 let tstr='strong',allTribes=[],granted=[],cmdPop=null,allProfs=[],allTypes=[],hiddenProf=[];
+// 3 = multiplayer (the usual Commander pod), 1 = playing 1v1. Some commanders are much weaker against a single opponent.
+let opps=3,mvRule=null;try{if(localStorage.getItem('mtg-pod')=='duel')opps=1}catch(e){}
+// "mana value 6 or greater" / "mana value 3 or less" in the commander's text: how big or small its spells should be. 'soft' = only "equal to its mana value".
+function mvParse(txt){const t=txt.toLowerCase();let m=t.match(/(?:mana value|converted mana cost)\s*(?:of\s*)?(\d+)\s*or\s*(?:greater|more)/);if(m)return{dir:'ge',n:+m[1]};
+ m=t.match(/(?:mana value|converted mana cost)\s*(?:of\s*)?(\d+)\s*or\s*(?:less|fewer|lower)/);if(m)return{dir:'le',n:+m[1]};
+ if(/(?:equal to|its|that card's) (?:its |that card's )?mana value/.test(t))return{dir:'ge',n:5,soft:true};return null}
+// Mechanics that only work with several opponents are switched off for 1v1 (and back on when you switch again).
+function podAdjust(){allProfs.forEach(x=>{if(x.p.mp){if(opps==1){if(x.st!='o'){x.pre=x.st;x.st='o'}}else if(x.pre){x.st=x.pre;x.pre=null}}})}
 const TSTR={strong:1,moderate:.55,off:0};
 const reEsc=x=>x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 // Oracle text with reminder text removed and the card's own name replaced by ~ (so "Gishath, Sun's Avatar" doesn't read as an Avatar deck)
 function cleanText(c){let t=(c.o||'').replace(/\([^)]*\)/g,'');const nm=c.n.split(' // ')[0];[nm,nm.split(',')[0]].filter((x,i,a)=>x&&a.indexOf(x)==i).sort((a,b)=>b.length-a.length).forEach(x=>{t=t.replace(new RegExp(reEsc(x),'gi'),'~')});return t}
-const GRANT=[['flying','flying'],['trample','trample'],['haste','haste'],['lifelink','lifelink'],['deathtouch','deathtouch'],['menace','menace'],['vigilance','vigilance'],['first strike','strike'],['double strike','strike'],['indestructible','protection'],['hexproof','protection']];
+const GRANT=[['flying','flying'],['trample','trample'],['haste','haste'],['lifelink','lifegain'],['deathtouch','deathtouch'],['menace','menace'],['vigilance','vigilance'],['first strike','strike'],['double strike','strike'],['indestructible','protection'],['hexproof','protection']];
 // Keywords the commander gives to other creatures: cards that already have them aren't specially wanted.
 function grantedKw(txt){const out=new Set();txt.toLowerCase().split(/\n|\.\s/).forEach(sn=>{
  if(!/\b(gains?|have|has|get|gets)\b/.test(sn))return;
@@ -484,27 +519,41 @@ function applyPlan(){tribes=allTribes.filter(x=>x.st!='o');
  profiles=[...allProfs.filter(x=>x.st!='o').map(x=>({...x.p,m:(x.st=='p'?1.2:.6)*L})),...hiddenProf];
  typeFocus=allTypes.filter(x=>x.st!='o').map(x=>({...x.f,m:(x.st=='p'?1:.5)*L,st:x.st}));sc.clear()}
 const KWLINE=/^((flying|first strike|double strike|lifelink|deathtouch|trample|haste|vigilance|menace|reach|indestructible|hexproof|ward[^,]*|flash|defender|partner[^,]*)(, )?)+$/i;
-const KWP=new Set(['protection','flying','trample','haste','lifelink','deathtouch','menace','vigilance','strike','flash','defender']);
+const KWP=new Set(['protection','flying','trample','haste','lifegain','deathtouch','menace','vigilance','strike','flash','defender']);
 // Mechanics the commander cares about, most-mentioned first. Its own keywords (a line like "Flying, indestructible") and its own enters trigger
 // are what it IS, not what it rewards, so they only count as secondary.
 function pickProfiles(txt){
  const lines=txt.replace(/tokens? (with|that has|that have)\b[^.\n;]*/gi,'tokens').split('\n').map(x=>x.trim()).filter(Boolean),rest=lines.filter(l=>!KWLINE.test(l.replace(/\s*\{[^}]*\}/g,''))),
   noEtb=rest.filter(l=>!/^when ~ enters/i.test(l)).join('\n').toLowerCase().replace(/lands? (you control )?enters?/g,''),restT=rest.join('\n').toLowerCase(),all=lines.join('\n').toLowerCase(),out=[];
+ const donates=/(opponents?|players?) gains? control/.test(restT);
  PROFILES.forEach(p=>{if(granted.some(g=>g.p==p.n)||!p.w.length)return;
-  const base=p.n=='etb'?noEtb:p.n=='counters'?restT.replace(/counters? on ~/g,''):p.n=='spells'?restT.replace(/(whenever|when) you cast [^,.]*creature spells?/g,''):restT;   // counters it puts on itself aren't a counters theme
-  if(p.d.test(base)){let n=(base.match(new RegExp(p.d.source,'g'))||[]).length;
+  if(p.mv&&(!mvRule||mvRule.dir!=p.mv))return;
+  if(p.n=='cheat'&&donates)return;   // the permanents go to your opponents, so it isn't cheating things in for yourself
+  const base=p.n=='etb'?noEtb:p.n=='counters'?restT.replace(/counters? on ~/g,''):p.n=='spells'?restT.replace(/(whenever|when) you cast [^.]*creature spells?/g,''):restT;   // counters it puts on itself aren't a counters theme
+  if(p.d.test(base)){let n=(base.match(new RegExp(p.d.source,'g'))||[]).length,low=false;
    if(p.n=='attack'){const m=(base.replace(/whenever ~ attacks/g,'').match(new RegExp(p.d.source,'g'))||[]).length;n=m||.4}   // its own attack trigger is the condition, not what it rewards
-   out.push({p,n,kw:false})}
+   // a commander that only cares about ITS OWN death isn't a sacrifice deck: dying costs commander tax, so it is a side theme
+   if(p.n=='sacrifice'&&!p.d.test(base.replace(/(when|whenever) ~ dies/g,''))){low=true;n=.5}
+   // free-casting instants and sorceries off the top is not cheating creatures into play
+   if(p.n=='cheat'&&!/onto the battlefield/.test(base)){low=true;n=.5}
+   if(p.mv&&mvRule.soft){low=true;n=.5}
+   out.push({p,n,kw:false,low})}
   else if(KWP.has(p.n)&&p.d.test(all))out.push({p,n:.5,kw:true})});
  out.sort((a,b)=>b.n-a.n);let m=0;
- return out.map(x=>({p:x.p,st:!x.kw&&m++<2?'p':'s'}))}
+ return out.map(x=>({p:x.p,kw:x.kw,st:!x.kw&&!x.low&&m++<2?'p':'s'}))}
 function readCmdr(){
  const txt=cleanText(cmd);
  kws=new Set(((txt+' '+(cmd.t.split('\u2014')[1]||'')).toLowerCase().match(/[a-z+\/\-]{4,}/g)||[]).filter(w=>!STOP.has(w)));
  allTribes=detectTribes(cmd).map(x=>mkTribe(x.t,x.st));
  granted=grantedKw(txt);
- allProfs=pickProfiles(txt);hiddenProf=PROFILES.filter(p=>!p.w.length&&p.d.test(txt.toLowerCase()));   // control-only settings (e.g. reveal-until-creature) still apply, they just aren't shown as themes
+ mvRule=mvParse(txt);
+ const pp=pickProfiles(txt);allProfs=pp.filter(x=>!x.kw).map(({p,st})=>({p,st}));
+ // the commander's own keywords (e.g. Flying) are not a theme, but cards with them still score a little
+ hiddenProf=[...PROFILES.filter(p=>!p.w.length&&p.d.test(txt.toLowerCase())).map(p=>({...p,hid:true})),...pp.filter(x=>x.kw).map(x=>({...x.p,m:.4,hid:true}))];
+ podAdjust();   // control-only settings (e.g. reveal-until-creature) still apply, they just aren't shown as themes
  setFocus();allTypes=typeFocus.map(f=>({f,st:'p'}));tstr='strong';
+ // "instant or sorcery" is already covered by the spells mechanic, so those two card types are only secondary
+ if(allProfs.some(x=>x.p.n=='spells'))allTypes.forEach(x=>{if(x.f.n=='instant'||x.f.n=='sorcery')x.st='s'});
  const pd=popData&&popData[cmd.n];cmdPop=pd&&pd.c&&pd.c.length?new Map(pd.c.map(([n,p])=>[n.split(' // ')[0].toLowerCase(),p])):null;
  applyPlan();renderPlan()}
 const STOP=new Set('target,your,that,this,each,card,cards,when,whenever,with,from,have,until,control,controls,battlefield,creature,creatures,enters,player,players,their,then,they,them,into,more,does,pay,gets,without,time,turn,end,may,instead,other,only,also,would,least,number,long,graveyard,library,hand,owner,spell,spells,permanent,permanents,abilities,ability,mana,legendary,{t}'.split(','));
@@ -521,7 +570,7 @@ function tribeRole(c){if(!tribes.length||!TSTR[tstr])return'';const st=(c.t.spli
  return r}
 // The commander's text with the parts the builder acts on highlighted.
 function markUp(text,rules){
- const R=[];rules.forEach((ru,pri)=>{const re=new RegExp(ru.re.source,'gi');let m;while((m=re.exec(text))){if(!m[0].length){re.lastIndex++;continue}R.push({a:m.index,b:m.index+m[0].length,cls:ru.cls,tip:ru.tip,pri})}});
+ const R=[];rules.forEach((ru,pri)=>{const re=new RegExp(ru.re.source,'gi');let m;while((m=re.exec(text))){if(!m[0].length){re.lastIndex++;continue}let e=m.index+m[0].length;if(/[a-z]$/i.test(m[0]))while(/[a-z]/i.test(text[e]||''))e++;R.push({a:m.index,b:e,cls:ru.cls,tip:ru.tip,pri})}});
  R.sort((x,y)=>x.a-y.a||x.pri-y.pri||(y.b-y.a)-(x.b-x.a));
  let out='',pos=0;const eh=t=>esc(t).replace(/\n/g,'<br>');
  for(const r of R){if(r.a<pos)continue;out+=eh(text.slice(pos,r.a))+`<mark class="${r.cls}" tabindex="0" data-tip="${esc(r.tip)}">${eh(text.slice(r.a,r.b))}</mark>`;pos=r.b}
@@ -531,7 +580,7 @@ function cmdrTextHtml(){
  const rules=[
   ...granted.map(g=>({re:new RegExp('\\b'+g.k+'\\b'),cls:'hg',tip:'Given to your creatures, so cards that already have it are not favoured'})),
   ...allTribes.map(x=>({re:tribeRe(x.t),cls:'ht',tip:'Creature type ('+stn[x.st]+')'})),
-  ...allProfs.map(x=>({re:x.p.d,cls:'hm',tip:'Mechanic: '+x.p.n+' ('+stn[x.st]+')'})),
+  ...allProfs.map(x=>({re:x.p.d,cls:'hm',tip:'Mechanic: '+(x.p.lab?x.p.lab():x.p.n)+' ('+stn[x.st]+')'})),
   ...allTypes.map(x=>({re:x.f.d,cls:'hy',tip:'Card type: '+x.f.n+' ('+stn[x.st]+')'}))];
  const txt=cmd.o.replace(/\([^)]*\)/g,'');
  return`<div class="ctext"><b>${esc(cmd.n)}</b> <span class="m">${esc(cmd.mc||'')}</span><br><i>${esc(cmd.t)}</i><br>${markUp(txt,rules)}</div>
@@ -540,12 +589,12 @@ function themeChip(kind,i,label,st){return`<button class="tchip ${st}" data-th="
 function renderPlan(){
  const el=$('#plan');if(!el)return;
  const r=rateOf(cmd),cap=x=>x[0].toUpperCase()+x.slice(1);
- const tChips=allTribes.map((x,i)=>themeChip('t',i,cap(x.t),x.st)).join(''),mChips=allProfs.map((x,i)=>themeChip('m',i,cap(x.p.n),x.st)).join(''),yChips=allTypes.map((x,i)=>themeChip('y',i,cap(x.f.n)+(x.f.cre?' creatures':''),x.st)).join('');
+ const tChips=allTribes.map((x,i)=>themeChip('t',i,cap(x.t),x.st)).join(''),mChips=allProfs.map((x,i)=>themeChip('m',i,x.p.lab?x.p.lab():cap(x.p.n),x.st)).join(''),yChips=allTypes.map((x,i)=>themeChip('y',i,cap(x.f.n)+(x.f.cre?' creatures':''),x.st)).join('');
  const haveM=new Set(allProfs.map(x=>x.p.n)),haveY=new Set(allTypes.map(x=>x.f.n));
  el.innerHTML=`<h4>How the builder reads this commander</h4>
  ${cmdrTextHtml()}
  <div class="m"><span class="stars" aria-label="${r.stars} out of 5 stars">${starStr(r.stars)}</span> <b>${r.label}</b> as a commander. ${r.why.join('. ')}.</div>
- ${popOf(cmd)!=null?`<div class="m"><b>${popOf(cmd)?fmtN(popOf(cmd))+' decks':'No decks'}</b> on EDHREC use this commander.</div>`:''}
+ ${popOf(cmd)!=null?`<div class="m"><b>${popOf(cmd)?fmtN(popOf(cmd))+' decks':'No decks'}</b> on EDHREC use this commander${firstOf(cmd)?' (first printed '+firstOf(cmd).slice(0,4)+')':''}.</div>`:(cmd.er>0?`<div class="m"><b>EDHREC rank #${fmtN(cmd.er)}</b> (1 is the most played). Deck counts need the weekly commander job.</div>`:'')}
  ${(()=>{const f=fitOf(cmd);return f?`<div class="m"><b>You own ${f.pct}%</b> of the cards people most often play with this commander (${f.n} of ${f.of}). The builder prefers those cards.</div>`:''})()}
  <h4>What to build around</h4>
  ${tChips?`<div class="m">Creature types</div><div class="chips">${tChips}</div>`:''}
@@ -554,11 +603,12 @@ function renderPlan(){
  ${tChips||mChips||yChips?'':'<div class="m">Nothing specific was found in its text. Add a theme below.</div>'}
  <div class="m">Click a theme to switch it between main, secondary and off. Main themes pull in the most cards.</div>
  <div class="chips"><input id="addT" list="typeList" placeholder="Add a creature type" aria-label="Add a creature type"><datalist id="typeList">${types.map(t=>`<option value="${t}">`).join('')}</datalist><button class="alt" id="addTb">Add</button>
- <select id="addM" aria-label="Add a mechanic or card type"><option value="">Add a mechanic or card type…</option><optgroup label="Mechanics">${PROFILES.filter(p=>!haveM.has(p.n)).map(p=>`<option value="m:${p.n}">${cap(p.n)}</option>`).join('')}</optgroup><optgroup label="Card types">${TYPEF.filter(x=>!haveY.has(x.n)).map(x=>`<option value="y:${x.n}">${cap(x.n)}</option>`).join('')}</optgroup></select>
- <label class="m">How hard to lean in <select id="tstr"><option value="strong">Fully</option><option value="moderate">Moderately</option></select></label></div>
+ <select id="addM" aria-label="Add a mechanic or card type"><option value="">Add a mechanic or card type…</option><optgroup label="Mechanics">${PROFILES.filter(p=>!haveM.has(p.n)&&!p.mv).map(p=>`<option value="m:${p.n}">${cap(p.n)}</option>`).join('')}</optgroup><optgroup label="Card types">${TYPEF.filter(x=>!haveY.has(x.n)).map(x=>`<option value="y:${x.n}">${cap(x.n)}</option>`).join('')}</optgroup></select>
+ <label class="m">How hard to lean in <select id="tstr"><option value="strong">Fully</option><option value="moderate">Moderately</option></select></label> <label class="m">Playing <select id="pod"><option value="multi">Multiplayer</option><option value="duel">1v1</option></select></label></div>
+ ${opps==1&&allProfs.some(x=>x.p.mp&&x.pre)?'<div class="m">Goad is switched off because you play 1v1: goaded creatures would only attack you.</div>':''}
  ${granted.length?`<div class="m">This commander gives other creatures ${[...new Set(granted.map(g=>g.k))].join(', ')}, so cards that merely have ${granted.length>1?'those':'that'} aren't favoured.</div>`:''}
  <div class="m">Changes rebuild the deck if one has been built.</div>`;
- $('#tstr').value=tstr;
+ $('#tstr').value=tstr;$('#pod').value=opps==1?'duel':'multi';
 }
 function planChanged(){applyPlan();renderPlan();if(deck.size)auto();else render()}
 // Own tooltip for the highlighted words (the browser's title tooltip is slow and easy to miss)
@@ -573,6 +623,7 @@ $('#plan').addEventListener('click',e=>{const b=e.target.closest('[data-th]');
   if(ex)ex.st=allTribes.some(y=>y.st=='p'&&y!==ex)?'s':'p';else allTribes.push(mkTribe(v,allTribes.some(y=>y.st=='p')?'s':'p'));planChanged()}});
 $('#plan').addEventListener('change',e=>{
  if(e.target.id=='tstr'){tstr=e.target.value;planChanged()}
+ if(e.target.id=='pod'){opps=e.target.value=='duel'?1:3;try{localStorage.setItem('mtg-pod',e.target.value)}catch(_){};rateCache.clear();podAdjust();planChanged()}
  if(e.target.id=='addM'&&e.target.value){const [k,n]=e.target.value.split(':');
   if(k=='m'){const p=PROFILES.find(x=>x.n==n);if(p)allProfs.push({p,st:'p'})}
   else{const x=TYPEF.find(y=>y.n==n);if(x)allTypes.push({f:{...x,cre:false},st:'p'})}
@@ -586,19 +637,22 @@ function cmdrRate(c){
  const kwLine=l=>/^((flying|first strike|double strike|lifelink|deathtouch|trample|haste|vigilance|menace|reach|indestructible|hexproof|ward[^,]*|flash|defender|partner[^,]*|haste)(, )?)+$/i.test(l.replace(/\s*\{[^}]*\}/g,''));
  const abil=lines.filter(l=>!kwLine(l));
  const etb=l=>/^when ~ enters/i.test(l)||/^when ~ (enters|is put onto)/i.test(l);
- const trig=abil.filter(l=>/^(whenever|at the beginning|when ~ (attacks|dies|deals|becomes))/i.test(l)||(/^when /i.test(l)&&!etb(l)));
+ const dies=l=>/^when(ever)? ~ (dies|is put into a graveyard)/i.test(l),dieL=abil.filter(dies);   // its own death trigger only works once, and costs tax to get back
+ const trig=abil.filter(l=>!dies(l)&&(/^(whenever|at the beginning|when ~ (attacks|dies|deals|becomes))/i.test(l)||(/^when /i.test(l)&&!etb(l))));
  const act=abil.filter(l=>/^[^"]*[:\u2236]/.test(l)&&/^(\{|[+\u2212\-]\d|sacrifice|tap|discard|pay|exile|remove)/i.test(l)||/^\{[^}]+\}[^.]*:/.test(l));
- const stat=abil.filter(l=>/(creatures|[a-z]+s) you control (get|have|gain)|spells you cast|you may (cast|play)|as long as|can't be|costs? \{?\d?\}? ?less|each opponent|players can't/i.test(l)&&!etb(l)&&!trig.includes(l)&&!act.includes(l));
- const etbs=abil.filter(etb),onlyEtb=etbs.length>0&&!trig.length&&!act.length&&!stat.length;
+ const stat=abil.filter(l=>/(creatures|[a-z]+s) you control (get|have|gain)|spells you cast|you may (cast|play)|as long as|can't be|costs? \{?\d?\}? ?less|each opponent|players can't/i.test(l)&&!etb(l)&&!dies(l)&&!trig.includes(l)&&!act.includes(l));
+ const etbs=abil.filter(etb),onlyEtb=etbs.length>0&&!trig.length&&!act.length&&!stat.length&&!dieL.length;
  const ongoing=trig.length+act.length+stat.length;
  if(act.length&&!trig.length&&act.every(l=>{const m=l.match(/^\{(\d+)\}/);return m&&+m[1]>=6})){p-=1;why.push('Its main ability costs a lot to use')}
  if(!abil.length){p-=2;why.push('Only keywords, no ability to build around')}
  else if(onlyEtb){p-=3;why.push('It only does something when it enters')}
  else if(ongoing){p+=2;why.push('Has a lasting ability that works all game');if(ongoing>=2){p+=.5}}
+ else if(etbs.length&&dieL.length){p+=1;why.push('Value when it enters and when it dies, but dying means paying commander tax to get it back')}
+ else if(dieL.length){p-=1;why.push('Its ability only works when it dies')}
  else if(etbs.length){p-=1}
  // theme / plan to build around
  const tr=types.length?detectTribes({...c,o:face}).filter(x=>x.sc>=1):[];
- const tp=PROFILES.filter(q=>q.d.test(txt.toLowerCase().replace(/counters? on ~/g,'').replace(/(whenever|when) you cast [^,.]*creature spells?/g,''))&&!['flying','trample','haste','lifelink','deathtouch','menace','vigilance','strike','protection','defender','flash','etb','reveal'].includes(q.n));
+ const tp=PROFILES.filter(q=>q.d.test(abil.join('\n').toLowerCase().replace(/counters? on ~/g,'').replace(/(whenever|when) you cast [^,.]*creature spells?/g,''))&&!['flying','trample','haste','deathtouch','menace','vigilance','strike','protection','defender','flash','etb','reveal'].includes(q.n));
  if(!onlyEtb){
   if(tr.length){p+=1;why.push('Tells you which creature type to build around ('+tr.slice(0,2).map(x=>x.t).join(', ')+')')}
   if(tp.length){p+=Math.min(1,.75*tp.length);why.push('Clear theme: '+tp.slice(0,3).map(x=>x.n).join(', '))}
@@ -609,6 +663,19 @@ function cmdrRate(c){
  }
  if(/partner|choose a background|friends forever|doctor's companion/i.test(txt)){p+=.5;why.push('Can be paired with a second commander')}
  if(/can be your commander/i.test(txt)&&!/Creature/.test(c.t)){p+=.5}
+ // Survival and recasting: a commander that dies is recast for 2 more each time, and a counterspell is only worth using on one that costs a lot.
+ {const isCre=/Creature/.test((c.t||'').split(' // ')[0]),tg=parseInt(c.tg),prot=/hexproof|indestructible|\bward\b|protection from/i.test(face),nocounter=/can't be countered/i.test(face);
+  if(isCre){
+   if(prot){p+=.5;why.push('Hard to remove (hexproof, indestructible, ward or protection)')}
+   else if(!isNaN(tg)&&tg<=1){p-=1;why.push('Toughness '+tg+': almost any removal kills it, and the commander tax adds up')}
+   else if(!isNaN(tg)&&tg<=3){p-=.5;why.push('Toughness '+tg+': cheap removal kills it')}
+   else if(!isNaN(tg)&&tg>=6){p+=.3;why.push('Toughness '+tg+': hard to kill')}}
+  if(nocounter){p+=.4;why.push('Cannot be countered')}
+  if(c.cmc<=2){p+=.3;why.push('Cheap: easy to recast, and rarely worth a counterspell')}
+  else if(c.cmc>=6&&c.cmc<8&&!nocounter){p-=.3;why.push('Costly: a counterspell on it is good value for opponents')}}
+ if(opps==1){
+  if(/number of opponents|for each opponent you have|opponents you have/i.test(face)){p-=1.5;why.push('It counts your opponents, and in 1v1 that is only one')}
+  if(/\bgoad/i.test(face)){p-=.5;why.push('Goad does little in 1v1: the creatures only attack you')}}
  if(c.cmc>=8){p-=1;why.push('Very expensive to cast again and again')}
  const nc=(c.ci||[]).length;if(nc>=5){p-=1.5;why.push(nc+' colours makes the deck harder to build')}else if(nc==4){p-=1;why.push('4 colours makes the deck harder to build')}else if(nc==3){p-=.5}
  const pts=Math.round(p*10)/10,stars=pts>=7.5?5:pts>=6.5?4:pts>=5?3:pts>=3.5?2:1;
@@ -621,11 +688,13 @@ function ev(c){
  const o=c.o.toLowerCase(),why=[],th=tribeHit(c);let v=th;if(th)why.push('tribe');
  const pw=/Creature/.test(c.t)?(parseInt(c.pw)||0):0;
  const np=/Instant|Sorcery/.test(c.t.split(' // ')[0]);
- profiles.forEach(p=>{let x=0;p.w.forEach(([re,w,po])=>{if(re.test(o)&&!(po&&np))x+=w});const cr=/Creature/.test(c.t.split(' // ')[0]);if(p.big&&pw>3)x+=p.big*Math.min(pw-3,6)/2;if(p.hi&&cr&&c.cmc>4)x+=p.hi*Math.min(c.cmc-4,5);if(p.lo&&cr&&c.cmc<=3)x-=p.lo;if(x>0){v+=Math.min(x,14)*(p.m??1);why.push(p.n)}else if(x<0)v+=x;});
+ const inLand=/Land/.test(c.t.split(' // ')[0]);
+ profiles.forEach(p=>{if(p.mv&&mvRule&&mvRule.dir==p.mv&&!inLand){const hit=p.mv=='ge'?c.cmc>=mvRule.n:c.cmc<=mvRule.n;if(hit){v+=(p.mv=='ge'?4:3)*(p.m??1)*(mvRule.soft?.5:1);why.push('mana value')}}
+  let x=0;p.w.forEach(([re,w,po])=>{if(re.test(o)&&!(po&&np))x+=w});const cr=/Creature/.test(c.t.split(' // ')[0]);if(p.big&&pw>3)x+=p.big*Math.min(pw-3,6)/2;if(p.hi&&cr&&c.cmc>4)x+=p.hi*Math.min(c.cmc-4,5);if(p.lo&&cr&&c.cmc<=3)x-=p.lo;if(x>0){v+=Math.min(x,14)*(p.m??1);why.push(p.n)}else if(x<0)v+=x;});
  const ft=c.t.split(' // ')[0];typeFocus.forEach(f=>{if(f.ty.test(ft)){const fm=f.m??1;v+=8*fm;why.push(f.n);if(f.cre&&/Creature/.test(ft))v+=10*fm}});
  const w=new Set((o+' '+c.t.toLowerCase()).match(/[a-z+\/\-]{4,}/g)||[]);let g=0;kws.forEach(k=>{if(w.has(k))g++});v+=Math.min(g,5)*.5;
  v+=c.er?Math.max(0,10-2.5*Math.log10(c.er))*.6:0;
- v-=Math.max(0,c.cmc-6)*.4;
+ v-=Math.max(0,c.cmc-(profiles.some(p=>p.mv=='ge'&&mvRule&&mvRule.dir=='ge')?9:6))*.4;
  if(cmdPop){const pc=cmdPop.get(c.n.split(' // ')[0].toLowerCase());if(pc){v+=Math.min(9,pc*.14);why.push('popular with this commander')}}
  if(granted.length&&/Creature/.test(c.t.split(' // ')[0])&&granted.some(g=>new RegExp('\\b'+g.k+'\\b').test(o.split('\n').slice(0,2).join(' ')) ))v-=2;
  const r={s:v,why};sc.set(c.n,r);return r}
@@ -647,7 +716,7 @@ function auto(){
  // Template from common Commander guides: ~36-38 lands, 10-12 ramp, ~10 draw, ~10 interaction, 2-3 wipes, rest is the plan.
  const agg=profiles.some(p=>p.agg),tr=tribes.length>0&&TSTR[tstr]>0,spell=profiles.some(p=>p.n=='spells'),big=cmd.cmc>=5;
  const TQ=tstr=='strong'?{p:22,s:6,pay:5}:{p:14,s:3,pay:3};
- const L=agg&&cmd.cmc<=3?35:big?37:36,R=Math.max(big?11:10,...profiles.map(p=>p.ramp||0)),D=agg?8:10,V=agg?7:9,W=agg?0:2;
+ const L=agg&&cmd.cmc<=3?35:big?37:36,R=Math.max(big?11:10,...profiles.map(p=>p.ramp&&!(p.mv&&mvRule&&mvRule.soft)?p.ramp:0)),D=agg?8:10,V=agg?7:9,W=agg?0:2;
  const N=99-L;let C=agg||tr?27:spell?10:Math.max(20,...profiles.map(p=>p.cre||0));
  if(typeFocus.some(f=>f.cre))C=Math.max(C,22);
  if(typeFocus.some(f=>f.n=='creature'&&f.st=='p'))C=Math.max(C,30);
@@ -656,6 +725,10 @@ function auto(){
  const Ccap=C+3;
  // share of non-land slots per mana value: 0-1, 2, 3, 4, 5, 6, 7+ (caps include slack)
  const F=[.09,.21,.21,.17,.12,.09,.07],cap=F.map((f,i)=>Math.ceil(f*N*(i>=4&&(agg||tr)?1.4:1.25)));
+ // a commander that wants big (or small) spells: enough of them that it actually happens, and room in the curve for them
+ const mvp=profiles.find(p=>p.mv=='ge'&&mvRule&&mvRule.dir=='ge');let MQ=0;
+ if(mvp){const n=mvRule.n;MQ=Math.round((n>=6?14:n==5?16:n==4?18:0)*(mvRule.soft?.55:1)*Math.min(1,(mvp.m??1)/1.2));
+  if(MQ){const st=Math.min(6,Math.max(0,n-1));for(let i=st;i<7;i++)cap[i]=Math.max(cap[i],Math.ceil(MQ/(7-st)*1.15))}}
  const cnt=Array(7).fill(0),isC=c=>/Creature/.test(c.t.split(' // ')[0]),B=c=>Math.min(7,Math.max(1,Math.floor(c.cmc)))-1;
  let nl=0,nc=0;
  const nonL=c=>cat(c)!='Land'&&!(agg&&cat(c)=='Wipe');
@@ -667,6 +740,7 @@ function auto(){
  if(tr){take(c=>nonL(c)&&tribeRole(c)=='p',TQ.p);take(c=>nonL(c)&&tribeRole(c)=='pay',TQ.pay);take(c=>nonL(c)&&tribeRole(c)=='s',TQ.s)}   // the tribe comes first
  const have=k=>[...deck.values()].filter(c=>cat(c)==k).length;
  take(c=>cat(c)=='Ramp',R-have('Ramp'));take(c=>cat(c)=='Draw',D-have('Draw'));take(c=>cat(c)=='Removal',V-have('Removal'));if(W)take(c=>cat(c)=='Wipe',W-have('Wipe'));
+ if(MQ)take(c=>nonL(c)&&c.cmc>=mvRule.n&&cat(c)!='Wipe',MQ-[...deck.values()].filter(c=>cat(c)!='Land'&&c.cmc>=mvRule.n).length);
  take(c=>nonL(c)&&isC(c),C-nc);          // creatures up to the target
  take(c=>nonL(c)&&!isC(c),N-nl);          // then non-creature support
  take(nonL,N-nl);take(nonL,N-nl,true);    // if the collection is short, relax the limits
@@ -677,7 +751,7 @@ function auto(){
 function render(){
  $('#dtitle').textContent=cmd.n;
  const total=deck.size+Object.values(basics).reduce((a,b)=>a+b,0)+1;
- $('#dsub').textContent=`${cmd.mc} · ${cmd.t} · ${total}/100 cards`+(tribes.length?` · Tribe: ${tribes.map(x=>x.t+(x.st=='s'?' (side)':'')).join(', ')}`:'')+((profiles.length||typeFocus.length)?` · Synergies: ${[...profiles.map(x=>x.n),...typeFocus.map(f=>f.n+(f.cre?' creatures':''))].join(', ')}`:'');
+ $('#dsub').textContent=`${cmd.mc} · ${cmd.t} · ${total}/100 cards`+(tribes.length?` · Tribe: ${tribes.map(x=>x.t+(x.st=='s'?' (side)':'')).join(', ')}`:'')+((profiles.length||typeFocus.length)?` · Synergies: ${[...profiles.filter(x=>!x.hid).map(x=>x.lab?x.lab():x.n),...typeFocus.map(f=>f.n+(f.cre?' creatures':''))].join(', ')}`:'');
  const nonland=[...deck.values()].filter(c=>cat(c)!='Land').length;
  $('#warn').textContent=total<100?`${100-total} slots open. Add cards or use Auto-build.`:total>100?`${total-100} cards over the limit.`:'';
  const cur=Array(8).fill(0);deck.forEach(c=>{if(cat(c)!='Land')cur[Math.min(7,Math.floor(c.cmc))]++});
