@@ -378,7 +378,11 @@ function showCmds(){
   return `<button class="cmd" data-c="${enc(c.n)}"><img src="${c.img}" alt=""><span>${c.n}<br><span class="m">${c.ci.join('')||'Colourless'}${pp!=null?' · '+(pp?fmtN(pp)+' decks':'no decks listed'):''}</span>${ft?`<br><span class="m"><b>You own ${ft.pct}%</b> of the usual cards (${ft.n} of ${ft.of})</span>`:''}</span></button>`}).join(''):'<p class="m">No legal commanders found in your collection.</p>';
 }
 $('#csort').onchange=showCmds;
-$('#clist').onclick=e=>{const b=e.target.closest('[data-c]');if(!b)return;
+// The creature-type list is only fetched during an import, so after a reload it is empty until something asks for it.
+// Fall back to the types found in the collection if Scryfall can't be reached.
+async function ensureTypes(){await loadTypes();
+ if(!types.length){const set=new Set();lib.forEach(c=>{if(/Creature/.test(c.t))(c.t.split(' // ')[0].split('\u2014')[1]||'').trim().split(/\s+/).forEach(x=>{if(x)set.add(x)})});types=[...set]}}
+$('#clist').onclick=async e=>{const b=e.target.closest('[data-c]');if(!b)return;await ensureTypes();
  cmd=lib.find(c=>c.n==decodeURIComponent(b.dataset.c));
  deck=new Map();basics={};ups=null;upsFailed=false;sc.clear();popBuyFor='';popBuy=new Map();
  readCmdr();syncBars();$('#s3').hidden=false;tab(true);render();$('#s3').scrollIntoView({behavior:'smooth'})};
@@ -399,7 +403,7 @@ const PROFILES=[
 P('goad',/\bgoad/,[[/\bgoad/,6],[/attacks? each (combat|turn) if able|must attack|attack each combat/,4],[/gain control of (target|each|all|up to)/,4],[/additional combat|extra combat/,5],[/\btrample\b|\bhaste\b/,2],[/whenever (a|another|one or more) creatures?[^.]{0,30}attacks?/,2],[/can't block|must be blocked/,2],[/each opponent|each other player/,1.5],[/gets? \+\d+\/\+\d+|\+x\/\+x|double[^.]{0,20}power/,1.5]],{big:3,agg:1,q:'(o:goad or o:"additional combat" or o:"gain control of target creature" or (t:creature pow>=6 (o:trample or o:haste)))'}),
 P('trample',/\btrample\b/,[[/\btrample\b/,2],[/\+\d+\/\+\d+|\+x\/\+x|double[^.]{0,20}power/,3],[/\+1\/\+1 counter/,2],[/additional combat/,3],[/deals combat damage to (a|an|that) (player|opponent)/,2],[/equal to its power|greatest power/,2]],{big:3,agg:1,q:'(t:creature pow>=6 o:trample)'}),
 P('haste',/\bhaste\b/,[[/\bhaste\b/,3],[/additional combat/,4],[/whenever[^.]{0,30}attacks/,2],[/\+\d+\/\+\d+/,1]],{big:1.5,agg:1,q:'(o:haste (o:"creatures you control" or o:"additional combat"))'}),
-P('attack',/whenever [^.]{0,40}attacks|\battacking\b/,[[/whenever[^.]{0,40}attacks/,3],[/additional combat/,4],[/\bhaste\b|\bvigilance\b/,1.5],[/attacking creatures? (get|have)|each attacking/,3],[/\+\d+\/\+\d+/,1]],{big:1,agg:1,q:'(o:"attacking creatures" or o:"additional combat" or o:"whenever a creature you control attacks")'}),
+P('attack',/whenever [^.]{0,60}\battacks?\b|\battacking\b/,[[/whenever[^.]{0,40}attacks/,3],[/additional combat/,4],[/\bhaste\b|\bvigilance\b/,1.5],[/attacking creatures? (get|have)|each attacking/,3],[/\+\d+\/\+\d+/,1]],{big:1,agg:1,q:'(o:"attacking creatures" or o:"additional combat" or o:"whenever a creature you control attacks")'}),
 P('flying',/\bflying\b/,[[/\bflying\b/,2],[/creatures you control (have|gain) flying|gains? flying/,4],[/\+\d+\/\+\d+/,1],[/\breach\b/,0.5]],{q:'(o:"creatures you control have flying" or o:"gains flying" or o:"whenever a creature you control with flying")'}),
 P('deathtouch',/deathtouch/,[[/deathtouch/,3],[/deals damage equal to its power|fights? /,2],[/\{t\}: [^.]*deals? \d+ damage/,2],[/first strike/,1]],{big:0.5,q:'(o:deathtouch (o:"creatures you control" or t:equipment) or o:"deals damage equal to its power")'}),
 P('lifelink',/lifelink|whenever you gain life|gain \d+ life/,[[/lifelink/,3],[/whenever you gain life/,4],[/gain (\d+|x|that much) life|gains? life/,2],[/life total/,1]],{big:1,q:'(o:lifelink o:"creatures you control" or o:"whenever you gain life")'}),
