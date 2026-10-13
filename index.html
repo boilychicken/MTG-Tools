@@ -71,6 +71,8 @@ label.row input{margin-right:6px}
 .tchip.s{border-color:var(--gold);color:var(--gold)}
 .tchip.o{opacity:.55;text-decoration:line-through}
 .stars{color:var(--gold);letter-spacing:1px}
+#htip{position:fixed;z-index:11;max-width:min(280px,90vw);background:var(--panel);border:1px solid var(--gold);border-radius:8px;padding:6px 10px;font-size:13px;pointer-events:none;box-shadow:0 6px 18px #0009}
+.plan mark{cursor:help}
 .ctext{padding:8px 10px;margin:6px 0;border:1px solid var(--line);border-radius:6px;background:#0f1815;line-height:1.5}
 .plan mark{border-radius:3px;padding:0 2px;color:inherit}.ht{background:#5b4a14}.hm{background:#1f4a5b}.hy{background:#4a2a5b}.hg{background:#3a3a3a;text-decoration:line-through}
 .plan input,.plan select{background:#0f1815;color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
@@ -275,6 +277,7 @@ dialog{background:var(--panel);color:var(--tx);border:1px solid var(--line);bord
 <dialog id="saveDlg" aria-labelledby="svTitle"><h2 id="svTitle">Save deck</h2><label class="m" for="svName">Deck name</label><input type="text" id="svName"><label class="m" for="svFolder">Folder (type a new one or pick an existing one)</label><input type="text" id="svFolder" list="svFolders"><datalist id="svFolders"></datalist><p class="m">Saving with the same name in the same folder replaces the older copy.</p><div class="tools"><button id="svOk">Save</button><button class="alt" id="svCancel">Cancel</button></div></dialog>
 <div id="toast" class="toast" role="status" hidden></div>
 <div id="tip" hidden role="tooltip"></div>
+<div id="htip" hidden role="tooltip"></div>
 <script>
 const $=s=>document.querySelector(s);
 const CK='mtg-cards-v6',BASIC=['Plains','Island','Swamp','Mountain','Forest'],COL='WUBRG';
@@ -431,16 +434,21 @@ P('cheat',/put [^.]{0,80}(creature|permanent|nonland)[^.]{0,60}onto the battlefi
 P('reveal',/reveal [^.]{0,80}until you reveal/,[],{lo:3,crt:16}),
 P('poison',/infect|toxic|poison counter/,[[/infect|toxic|poison counter/,4],[/proliferate/,3]],{q:'(o:infect or o:toxic or o:"poison counter")'}),
 P('monarch',/monarch|initiative/,[[/monarch|initiative/,4],[/whenever[^.]{0,30}deals combat damage to (you|a player)/,2]],{q:'(o:monarch or o:initiative)'}),
+P('tap',/\bis tapped\b|\bbecomes? tapped\b|\bwhile tapped\b/,[[/tap an untapped (creature|permanent) you control|tap target creature you control|tap another untapped/,4],[/\bcrew\b|\bconvoke\b/,2],[/attacks? each (combat|turn) if able|must attack|\bgoad\b/,1.5],[/tap (target|all|up to)/,1]],{q:'(o:"tap an untapped creature you control" or o:convoke or o:crew)'}),
+P('power',/\bpower (greater|is|of|equal)|\bbase power\b|equal to (its|their|that creature's) power|double[^.]{0,20}power|\bgreatest power\b/,[[/\+\d+\/\+\d+|\+x\/\+[0x]/,3],[/equipped creature gets|enchanted creature gets|creatures you control get \+|other creatures you control get \+/,2.5],[/double[^.]{0,20}power|power equal|twice (its|their) power/,3],[/\bproliferate\b|\+1\/\+1 counter/,2]],{big:2,q:'(o:"creatures you control get" or (t:equipment o:"equipped creature gets") or (t:aura o:"enchanted creature gets"))'}),
+P('mana',/unspent mana|mana pool|\bdouble[^.]{0,25}mana|twice that much|\badd \{[a-z0-9]\}|\badd (one|two|three|x) mana|mana (doesn't|don't) empty/,[[/\badd \{|\badd (one|two|three|x|an additional)[^.]{0,20}mana|adds? an additional/,2.5],[/twice that much|double[^.]{0,25}mana|for each mana/,4],[/\{x\}|where x is|\bx is\b/,1.5],[/untap (target|all|each|up to)[^.]{0,30}(land|permanent)/,2],[/unspent mana|mana (doesn't|don't) empty|don't lose/,3]],{ramp:13,q:'(o:"twice that much" or o:"unspent mana" or (o:double o:mana))'}),
+P('voltron',/\battached to ~|\b(auras?|equipment) (and|or) (auras?|equipment)\b|\beach (aura|equipment)\b/,[[/\bequip \{|equip cost|reconfigure|\bequip\b/,3],[/attach(es)? (target|it|that|this)|attached to (target|a|that)/,3],[/hexproof|indestructible|protection from|\bward\b/,2],[/equipped creature|enchanted creature/,2],[/double strike|additional combat|\btrample\b/,1.5]],{q:'(o:"equipped creature" or o:"enchanted creature" or o:reconfigure)'}),
 P('vehicles',/\bcrew\b|vehicle/,[[/\bcrew\b|vehicle/,4],[/artifact/,1]],{q:'(o:crew or t:vehicle)'})
 ];
 // Types the commander cares about (e.g. "artifact creatures you control get +2/+2"): reward cards of that type.
-const TYPEF=[['artifact',/\bartifacts?\b/,/Artifact/],['enchantment',/\benchantments?\b/,/Enchantment/],['legendary',/\blegendary\b/,/Legendary/],['equipment',/\bequipment\b/,/Equipment/],['aura',/\bauras?\b/,/Aura/],['vehicle',/\bvehicles?\b/,/Vehicle/],['planeswalker',/\bplaneswalkers?\b/,/Planeswalker/],['saga',/\bsagas?\b/,/Saga/],['instant',/\binstants?\b/,/Instant/],['sorcery',/\bsorcer(y|ies)\b/,/Sorcery/]].map(([n,d,ty])=>({n,d,ty}));
+const TYPEF=[['creature',/\bcreature spells?\b/,/Creature/],['artifact',/\bartifacts?\b/,/Artifact/],['enchantment',/\benchantments?\b/,/Enchantment/],['legendary',/\blegendary\b/,/Legendary/],['equipment',/\bequipment\b/,/Equipment/],['aura',/\bauras?\b/,/Aura/],['vehicle',/\bvehicles?\b/,/Vehicle/],['planeswalker',/\bplaneswalkers?\b/,/Planeswalker/],['saga',/\bsagas?\b/,/Saga/],['instant',/\binstants?\b/,/Instant/],['sorcery',/\bsorcer(y|ies)\b/,/Sorcery/]].map(([n,d,ty])=>({n,d,ty}));
 let typeFocus=[];
 function setFocus(){const txt=cmd.o.toLowerCase().split(/\n|\.\s/).filter(x=>!/\b(destroy|exile|counter)\b[^.]*\btarget\b/.test(x)).join('. ');
- typeFocus=TYPEF.filter(x=>x.d.test(txt)).map(x=>({...x,cre:new RegExp('\\b'+x.n+' creatures?\\b').test(txt)}))}
+ const nt=txt.replace(/creates?[^.\n]*tokens?/g,'');
+ typeFocus=TYPEF.filter(x=>x.d.test(txt)).map(x=>({...x,cre:new RegExp('\\b'+x.n+' creatures?\\b').test(nt)}))}
 async function loadTypes(){if(types.length)return;try{const c=localStorage.getItem('mtg-types');if(c){types=JSON.parse(c);return}const r=await fetch('https://api.scryfall.com/catalog/creature-types');types=(await r.json()).data||[];localStorage.setItem('mtg-types',JSON.stringify(types))}catch(e){}}
 function tribeRe(t){const v=[t,t+'s',t+'es'];if(/f$/.test(t))v.push(t.replace(/f$/,'ves'));if(/fe$/.test(t))v.push(t.replace(/fe$/,'ves'));if(/y$/.test(t))v.push(t.replace(/y$/,'ies'));return new RegExp('\\b('+v.map(x=>x.replace(/[^a-z]/g,'.?')).join('|')+')\\b','i')}
-let tstr='strong',allTribes=[],granted=[],cmdPop=null,allProfs=[],allTypes=[];
+let tstr='strong',allTribes=[],granted=[],cmdPop=null,allProfs=[],allTypes=[],hiddenProf=[];
 const TSTR={strong:1,moderate:.55,off:0};
 const reEsc=x=>x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 // Oracle text with reminder text removed and the card's own name replaced by ~ (so "Gishath, Sun's Avatar" doesn't read as an Avatar deck)
@@ -458,23 +466,44 @@ function detectTribes(c){
  const sents=txt.split(/\n|\.\s/).filter(x=>!/opponents? controls?/i.test(x));
  const res=[];
  types.forEach(T=>{const t=T.toLowerCase(),re=tribeRe(t);let n=0,grant=0;
-  sents.forEach(sn=>{const m=sn.match(new RegExp(re.source,'gi'));if(m){n+=m.length;if(new RegExp('becomes? an? '+re.source,'i').test(sn))grant++}});
-  if(!n)return;
+  let tok=0;
+  sents.forEach(sn=>{const ci=sn.search(/\bcreates?\b/i),g=new RegExp(re.source,'gi');let m;
+   while((m=g.exec(sn))){
+    // a type named after "create" is just what the tokens are, unless it goes on to say "you control" or gives them something
+    const after=sn.slice(m.index+m[0].length);
+    if(ci>=0&&m.index>ci&&!/^\W*(creatures?\s+)?(you control|get|gets|have|has|gain)\b/i.test(after))tok++;
+    else{n++;if(new RegExp('becomes? an? '+re.source,'i').test(sn))grant++}}});
+  if(!n&&!tok)return;
   const ownHit=new RegExp('\\b'+t.replace(/[^a-z]/g,'.?')+'\\b').test(own);
-  res.push({t,sc:n+(ownHit?2:0)-grant*1.2,own:ownHit,n})});
+  res.push({t,sc:n+(ownHit?2:0)-grant*1.2+tok*.4,own:ownHit,n})});
  res.sort((a,b)=>b.sc-a.sc);
- return res.map((x,i)=>({...x,st:i==0?'p':(i<3&&x.sc>=.5?'s':'o')}))}
+ return res.map((x,i)=>({...x,st:i==0&&x.sc>=1?'p':(i<3&&x.n>0&&x.sc>=.3?'s':'o')}))}
 function mkTribe(t,st){return {t,st,re:tribeRe(t),tre:new RegExp('\\b'+t.replace(/[^a-z]/g,'.?')+'\\b')}}
 function applyPlan(){tribes=allTribes.filter(x=>x.st!='o');
  const L=tstr=='moderate'?.6:1;
- profiles=allProfs.filter(x=>x.st!='o').map(x=>({...x.p,m:(x.st=='p'?1.2:.6)*L}));
- typeFocus=allTypes.filter(x=>x.st!='o').map(x=>({...x.f,m:(x.st=='p'?1:.5)*L}));sc.clear()}
+ profiles=[...allProfs.filter(x=>x.st!='o').map(x=>({...x.p,m:(x.st=='p'?1.2:.6)*L})),...hiddenProf];
+ typeFocus=allTypes.filter(x=>x.st!='o').map(x=>({...x.f,m:(x.st=='p'?1:.5)*L,st:x.st}));sc.clear()}
+const KWLINE=/^((flying|first strike|double strike|lifelink|deathtouch|trample|haste|vigilance|menace|reach|indestructible|hexproof|ward[^,]*|flash|defender|partner[^,]*)(, )?)+$/i;
+const KWP=new Set(['protection','flying','trample','haste','lifelink','deathtouch','menace','vigilance','strike','flash','defender']);
+// Mechanics the commander cares about, most-mentioned first. Its own keywords (a line like "Flying, indestructible") and its own enters trigger
+// are what it IS, not what it rewards, so they only count as secondary.
+function pickProfiles(txt){
+ const lines=txt.replace(/tokens? (with|that has|that have)\b[^.\n;]*/gi,'tokens').split('\n').map(x=>x.trim()).filter(Boolean),rest=lines.filter(l=>!KWLINE.test(l.replace(/\s*\{[^}]*\}/g,''))),
+  noEtb=rest.filter(l=>!/^when ~ enters/i.test(l)).join('\n').toLowerCase().replace(/lands? (you control )?enters?/g,''),restT=rest.join('\n').toLowerCase(),all=lines.join('\n').toLowerCase(),out=[];
+ PROFILES.forEach(p=>{if(granted.some(g=>g.p==p.n)||!p.w.length)return;
+  const base=p.n=='etb'?noEtb:p.n=='counters'?restT.replace(/counters? on ~/g,''):p.n=='spells'?restT.replace(/(whenever|when) you cast [^,.]*creature spells?/g,''):restT;   // counters it puts on itself aren't a counters theme
+  if(p.d.test(base)){let n=(base.match(new RegExp(p.d.source,'g'))||[]).length;
+   if(p.n=='attack'){const m=(base.replace(/whenever ~ attacks/g,'').match(new RegExp(p.d.source,'g'))||[]).length;n=m||.4}   // its own attack trigger is the condition, not what it rewards
+   out.push({p,n,kw:false})}
+  else if(KWP.has(p.n)&&p.d.test(all))out.push({p,n:.5,kw:true})});
+ out.sort((a,b)=>b.n-a.n);let m=0;
+ return out.map(x=>({p:x.p,st:!x.kw&&m++<2?'p':'s'}))}
 function readCmdr(){
  const txt=cleanText(cmd);
  kws=new Set(((txt+' '+(cmd.t.split('\u2014')[1]||'')).toLowerCase().match(/[a-z+\/\-]{4,}/g)||[]).filter(w=>!STOP.has(w)));
  allTribes=detectTribes(cmd).map(x=>mkTribe(x.t,x.st));
  granted=grantedKw(txt);
- allProfs=PROFILES.filter(p=>p.d.test(txt.toLowerCase())&&!granted.some(g=>g.p==p.n)).map((p,i)=>({p,st:i<2?'p':'s'}));
+ allProfs=pickProfiles(txt);hiddenProf=PROFILES.filter(p=>!p.w.length&&p.d.test(txt.toLowerCase()));   // control-only settings (e.g. reveal-until-creature) still apply, they just aren't shown as themes
  setFocus();allTypes=typeFocus.map(f=>({f,st:'p'}));tstr='strong';
  const pd=popData&&popData[cmd.n];cmdPop=pd&&pd.c&&pd.c.length?new Map(pd.c.map(([n,p])=>[n.split(' // ')[0].toLowerCase(),p])):null;
  applyPlan();renderPlan()}
@@ -495,7 +524,7 @@ function markUp(text,rules){
  const R=[];rules.forEach((ru,pri)=>{const re=new RegExp(ru.re.source,'gi');let m;while((m=re.exec(text))){if(!m[0].length){re.lastIndex++;continue}R.push({a:m.index,b:m.index+m[0].length,cls:ru.cls,tip:ru.tip,pri})}});
  R.sort((x,y)=>x.a-y.a||x.pri-y.pri||(y.b-y.a)-(x.b-x.a));
  let out='',pos=0;const eh=t=>esc(t).replace(/\n/g,'<br>');
- for(const r of R){if(r.a<pos)continue;out+=eh(text.slice(pos,r.a))+`<mark class="${r.cls}" title="${esc(r.tip)}">${eh(text.slice(r.a,r.b))}</mark>`;pos=r.b}
+ for(const r of R){if(r.a<pos)continue;out+=eh(text.slice(pos,r.a))+`<mark class="${r.cls}" tabindex="0" data-tip="${esc(r.tip)}">${eh(text.slice(r.a,r.b))}</mark>`;pos=r.b}
  return out+eh(text.slice(pos))}
 function cmdrTextHtml(){
  const stn={p:'main',s:'secondary',o:'off'};
@@ -532,6 +561,11 @@ function renderPlan(){
  $('#tstr').value=tstr;
 }
 function planChanged(){applyPlan();renderPlan();if(deck.size)auto();else render()}
+// Own tooltip for the highlighted words (the browser's title tooltip is slow and easy to miss)
+{const h=$('#htip'),show=(m)=>{h.textContent=m.dataset.tip;h.hidden=false;const r=m.getBoundingClientRect(),w=h.offsetWidth;h.style.left=Math.max(8,Math.min(innerWidth-w-8,r.left))+'px';h.style.top=(r.bottom+6+h.offsetHeight>innerHeight?r.top-h.offsetHeight-6:r.bottom+6)+'px'},hide=()=>{h.hidden=true};
+ const P=$('#plan');P.addEventListener('mouseover',e=>{const m=e.target.closest&&e.target.closest('mark[data-tip]');m?show(m):hide()});P.addEventListener('mouseleave',hide);
+ P.addEventListener('focusin',e=>{const m=e.target.closest&&e.target.closest('mark[data-tip]');if(m)show(m)});P.addEventListener('focusout',hide);
+ P.addEventListener('click',e=>{const m=e.target.closest&&e.target.closest('mark[data-tip]');m?show(m):hide()})}
 $('#plan').addEventListener('click',e=>{const b=e.target.closest('[data-th]');
  if(b){const [k,i]=b.dataset.th.split(':'),L=k=='t'?allTribes:k=='m'?allProfs:allTypes,x=L[+i];x.st=x.st=='p'?'s':x.st=='s'?'o':'p';
   if(k=='t'&&x.st=='p')allTribes.forEach(y=>{if(y!==x&&y.st=='p')y.st='s'});planChanged();return}
@@ -548,7 +582,7 @@ $('#plan').addEventListener('change',e=>{
 // How good a card is AS A COMMANDER: a lasting ability and a clear plan to build around. Pure power (Abigale) doesn't count.
 function cmdrRate(c){
  const why=[];let p=3;
- const face=(c.o||'').split('\n//\n')[0],txt=cleanText({...c,o:face}),lines=txt.split('\n').map(x=>x.trim()).filter(Boolean);
+ const face=(c.o||'').split('\n//\n')[0],txt=cleanText({...c,o:face}),lines=txt.split('\n').map(x=>x.trim().replace(/^[A-Z][A-Za-z' ]{2,24} \u2014 /,'')).filter(Boolean);
  const kwLine=l=>/^((flying|first strike|double strike|lifelink|deathtouch|trample|haste|vigilance|menace|reach|indestructible|hexproof|ward[^,]*|flash|defender|partner[^,]*|haste)(, )?)+$/i.test(l.replace(/\s*\{[^}]*\}/g,''));
  const abil=lines.filter(l=>!kwLine(l));
  const etb=l=>/^when ~ enters/i.test(l)||/^when ~ (enters|is put onto)/i.test(l);
@@ -557,27 +591,28 @@ function cmdrRate(c){
  const stat=abil.filter(l=>/(creatures|[a-z]+s) you control (get|have|gain)|spells you cast|you may (cast|play)|as long as|can't be|costs? \{?\d?\}? ?less|each opponent|players can't/i.test(l)&&!etb(l)&&!trig.includes(l)&&!act.includes(l));
  const etbs=abil.filter(etb),onlyEtb=etbs.length>0&&!trig.length&&!act.length&&!stat.length;
  const ongoing=trig.length+act.length+stat.length;
+ if(act.length&&!trig.length&&act.every(l=>{const m=l.match(/^\{(\d+)\}/);return m&&+m[1]>=6})){p-=1;why.push('Its main ability costs a lot to use')}
  if(!abil.length){p-=2;why.push('Only keywords, no ability to build around')}
- else if(onlyEtb){p-=3;why.push('It only does something when it enters, so it is usually better in the 99')}
+ else if(onlyEtb){p-=3;why.push('It only does something when it enters')}
  else if(ongoing){p+=2;why.push('Has a lasting ability that works all game');if(ongoing>=2){p+=.5}}
  else if(etbs.length){p-=1}
  // theme / plan to build around
  const tr=types.length?detectTribes({...c,o:face}).filter(x=>x.sc>=1):[];
- const tp=PROFILES.filter(q=>q.d.test(txt.toLowerCase())&&!['flying','trample','haste','lifelink','deathtouch','menace','vigilance','strike','protection','defender','flash','etb'].includes(q.n));
+ const tp=PROFILES.filter(q=>q.d.test(txt.toLowerCase().replace(/counters? on ~/g,'').replace(/(whenever|when) you cast [^,.]*creature spells?/g,''))&&!['flying','trample','haste','lifelink','deathtouch','menace','vigilance','strike','protection','defender','flash','etb','reveal'].includes(q.n));
  if(!onlyEtb){
   if(tr.length){p+=1;why.push('Tells you which creature type to build around ('+tr.slice(0,2).map(x=>x.t).join(', ')+')')}
   if(tp.length){p+=Math.min(1,.75*tp.length);why.push('Clear theme: '+tp.slice(0,3).map(x=>x.n).join(', '))}
   if(stat.some(l=>/(other )?[a-z ]*(creatures|[a-z]+s) you control (get|have|gain)/i.test(l))){p+=1;why.push('Boosts your whole team')}
   const live=[...trig,...act,...stat];
   if(live.some(l=>/onto the battlefield|without paying|additional combat|extra turn|cast [^.]*from (your )?(graveyard|exile)/i.test(l))){p+=1.5;why.push('Puts creatures or spells into play for free')}
-  if(trig.some(l=>/\b(three|four|five|six|seven|eight|\d+) or more\b/i.test(l))){p-=1.5;why.push('Its main trigger needs several creatures first, so it is hard to set off')}
+  if(trig.some(l=>/\b(three|four|five|six|seven|eight|\d+) or more (?!mana|cards?|life|damage|counters)/i.test(l))){p-=1.5;why.push('Its main trigger needs several creatures first, so it is hard to set off')}
  }
  if(/partner|choose a background|friends forever|doctor's companion/i.test(txt)){p+=.5;why.push('Can be paired with a second commander')}
  if(/can be your commander/i.test(txt)&&!/Creature/.test(c.t)){p+=.5}
  if(c.cmc>=8){p-=1;why.push('Very expensive to cast again and again')}
- const nc=(c.ci||[]).length;if(nc>=4){p-=1.5;why.push(nc+' colours makes the deck harder to build')}else if(nc==3){p-=.5}
+ const nc=(c.ci||[]).length;if(nc>=5){p-=1.5;why.push(nc+' colours makes the deck harder to build')}else if(nc==4){p-=1;why.push('4 colours makes the deck harder to build')}else if(nc==3){p-=.5}
  const pts=Math.round(p*10)/10,stars=pts>=7.5?5:pts>=6.5?4:pts>=5?3:pts>=3.5?2:1;
- const label=['','Better in the 99','Weak commander','Solid commander','Strong commander','Built to lead'][stars];
+ const label=['','Weak commander','Limited commander','Solid commander','Strong commander','Built to lead'][stars];
  return {stars,pts,label,why:why.length?why:['Nothing stands out as a commander plan']}}
 
 const sc=new Map();
@@ -587,7 +622,7 @@ function ev(c){
  const pw=/Creature/.test(c.t)?(parseInt(c.pw)||0):0;
  const np=/Instant|Sorcery/.test(c.t.split(' // ')[0]);
  profiles.forEach(p=>{let x=0;p.w.forEach(([re,w,po])=>{if(re.test(o)&&!(po&&np))x+=w});const cr=/Creature/.test(c.t.split(' // ')[0]);if(p.big&&pw>3)x+=p.big*Math.min(pw-3,6)/2;if(p.hi&&cr&&c.cmc>4)x+=p.hi*Math.min(c.cmc-4,5);if(p.lo&&cr&&c.cmc<=3)x-=p.lo;if(x>0){v+=Math.min(x,14)*(p.m??1);why.push(p.n)}else if(x<0)v+=x;});
- const ft=c.t.split(' // ')[0];typeFocus.forEach(f=>{if(f.ty.test(ft)){const fm=f.m??1;v+=5*fm;why.push(f.n);if(f.cre&&/Creature/.test(ft))v+=6*fm}});
+ const ft=c.t.split(' // ')[0];typeFocus.forEach(f=>{if(f.ty.test(ft)){const fm=f.m??1;v+=8*fm;why.push(f.n);if(f.cre&&/Creature/.test(ft))v+=10*fm}});
  const w=new Set((o+' '+c.t.toLowerCase()).match(/[a-z+\/\-]{4,}/g)||[]);let g=0;kws.forEach(k=>{if(w.has(k))g++});v+=Math.min(g,5)*.5;
  v+=c.er?Math.max(0,10-2.5*Math.log10(c.er))*.6:0;
  v-=Math.max(0,c.cmc-6)*.4;
@@ -612,9 +647,10 @@ function auto(){
  // Template from common Commander guides: ~36-38 lands, 10-12 ramp, ~10 draw, ~10 interaction, 2-3 wipes, rest is the plan.
  const agg=profiles.some(p=>p.agg),tr=tribes.length>0&&TSTR[tstr]>0,spell=profiles.some(p=>p.n=='spells'),big=cmd.cmc>=5;
  const TQ=tstr=='strong'?{p:22,s:6,pay:5}:{p:14,s:3,pay:3};
- const L=agg&&cmd.cmc<=3?35:big?37:36,R=big?11:10,D=agg?8:10,V=agg?7:9,W=agg?0:2;
+ const L=agg&&cmd.cmc<=3?35:big?37:36,R=Math.max(big?11:10,...profiles.map(p=>p.ramp||0)),D=agg?8:10,V=agg?7:9,W=agg?0:2;
  const N=99-L;let C=agg||tr?27:spell?10:Math.max(20,...profiles.map(p=>p.cre||0));
  if(typeFocus.some(f=>f.cre))C=Math.max(C,22);
+ if(typeFocus.some(f=>f.n=='creature'&&f.st=='p'))C=Math.max(C,30);
  profiles.forEach(p=>{if(p.crt)C=Math.min(C,p.crt)});
  if(tr)C=Math.max(C,TQ.p+TQ.s+4);
  const Ccap=C+3;
@@ -627,6 +663,7 @@ function auto(){
   const land=cat(c)=='Land',b=B(c);
   if(!land&&!relax&&(cnt[b]>=cap[b]||(isC(c)&&nc>=Ccap)))continue;
   deck.set(c.n,c);n--;if(!land){cnt[b]++;nl++;if(isC(c))nc++}}};
+ typeFocus.filter(f=>f.st=='p'&&f.m>=.5).forEach(f=>take(c=>nonL(c)&&f.ty.test(c.t.split(' // ')[0])&&(!f.cre||isC(c)),Math.round((f.n=='creature'?30:f.cre?18:12)*Math.min(1,f.m))));   // a main card-type theme comes first
  if(tr){take(c=>nonL(c)&&tribeRole(c)=='p',TQ.p);take(c=>nonL(c)&&tribeRole(c)=='pay',TQ.pay);take(c=>nonL(c)&&tribeRole(c)=='s',TQ.s)}   // the tribe comes first
  const have=k=>[...deck.values()].filter(c=>cat(c)==k).length;
  take(c=>cat(c)=='Ramp',R-have('Ramp'));take(c=>cat(c)=='Draw',D-have('Draw'));take(c=>cat(c)=='Removal',V-have('Removal'));if(W)take(c=>cat(c)=='Wipe',W-have('Wipe'));
