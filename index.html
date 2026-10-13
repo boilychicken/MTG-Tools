@@ -844,10 +844,14 @@ const sg=v=>(v>=0?'+':'−')+gb(Math.abs(v));
 const hDates=()=>Object.keys(hist.d).sort();
 const saveHist=()=>idb.set('prices',hist);
 // value of the copies you own: normal copies at the normal price, foils at the foil price (each falls back to the other if missing)
-const cv=(n,pe)=>{if(!pe)return 0;const q=qty.get(n)||1,f=Math.min(q,foilN.get(n)||0),e=pe[0]??pe[1]??0,ff=pe[1]??pe[0]??0;return(q-f)*e+f*ff};
+const isBasicName=n=>/^(Snow-Covered )?(Plains|Island|Swamp|Mountain|Forest)$|^Wastes$/.test(n);
+// Basic lands are left out of every value: their prices depend on which special printing Scryfall returns, so they would add noise.
+const cv=(n,pe)=>{if(!pe||isBasicName(n))return 0;const q=qty.get(n)||1,f=Math.min(q,foilN.get(n)||0),e=pe[0]??pe[1]??0,ff=pe[1]??pe[0]??0;return(q-f)*e+f*ff};
 const pTerms=()=>parseQ($('#pfs').value),subset=()=>{const t=pTerms();return lib.filter(c=>passes(c)&&matches(c,t))};
-function allSeries(L){L=L||lib;const last=new Map();return hDates().map(d=>{for(const n in hist.d[d])last.set(n,hist.d[d][n]);let t=0;L.forEach(c=>{t+=cv(c.n,last.get(c.n))});return{d,t:t*rt(d)}})}
-function stateAt(day){const last=new Map();for(const d of hDates()){if(d>day)break;for(const n in hist.d[d])last.set(n,hist.d[d][n])}return last}
+// A card that only started being recorded later is valued at its first known price for earlier days, so newly tracked cards don't make the history jump.
+const firstPrices=()=>{const f=new Map();for(const d of hDates())for(const n in hist.d[d])if(!f.has(n))f.set(n,hist.d[d][n]);return f};
+function allSeries(L){L=L||lib;const last=firstPrices();return hDates().map(d=>{for(const n in hist.d[d])last.set(n,hist.d[d][n]);let t=0;L.forEach(c=>{t+=cv(c.n,last.get(c.n))});return{d,t:t*rt(d)}})}
+function stateAt(day){const last=firstPrices();for(const d of hDates()){if(d>day)break;for(const n in hist.d[d])last.set(n,hist.d[d][n])}return last}
 
 // exchange rate: GBP per EUR. Each day's rate is kept so the history is valued in pounds as it was that day.
 const rt=d=>{const f=hist.fx||{};let v=null,first=null;for(const k of Object.keys(f).sort()){if(first==null)first=f[k];if(k<=d)v=f[k];else break}return v??first??fxNow};
@@ -882,7 +886,7 @@ async function snapshot(){
    try{const data=await post(b.map(c=>({name:c.n.split(' // ')[0]}))),by={};
     data.forEach(c=>{by[c.name.toLowerCase()]=c;c.name.split(' // ').forEach(x=>by[x.toLowerCase()]=by[x.toLowerCase()]||c)});
     b.forEach(c=>{const x=by[c.n.toLowerCase()]||by[c.n.split(' // ')[0].toLowerCase()],p=x&&x.prices;
-     if(p&&(p.eur!=null||p.eur_foil!=null)){entry[c.n]=[p.eur!=null?+p.eur:null,p.eur_foil!=null?+p.eur_foil:null];got++}else{nop++;nopL.push(c)}});
+     if(p&&(p.eur!=null||p.eur_foil!=null)){entry[c.n]=[p.eur!=null?+p.eur:null,p.eur_foil!=null?+p.eur_foil:null];got++}else{nop++;if(!isBasicName(c.n))nopL.push(c)}});
    }catch(e){failed+=b.length}
    await sleep(120)}
   if(nopL.length){say(`Looking up other printings for ${nopL.length} cards…`);for(const c of nopL.slice(0,40)){try{const r=await fetch('https://api.scryfall.com/cards/search?q='+enc('!"'+c.n.split(' // ')[0]+'" game:paper')+'&unique=prints&order=released&dir=desc'),j=r.ok?await r.json():null,x=j&&(j.data||[]).find(y=>y.prices&&(y.prices.eur!=null||y.prices.eur_foil!=null));
@@ -1270,7 +1274,7 @@ async function getSetCards(code){
  return cs}
 function statRows(){
  const ds=hDates(),last=ds.length?stateAt(ds[ds.length-1]):new Map();
- return lib.map(c=>{const q=qty.get(c.n)||1,pe=last.get(c.n),v=pe?cv(c.n,pe)*fxNow:(c.p!=null&&c.p!==''?+c.p*q*fxNow:0),m=metaOf(c);
+ return lib.map(c=>{const q=qty.get(c.n)||1,pe=last.get(c.n),v=pe?cv(c.n,pe)*fxNow:(c.p!=null&&c.p!==''&&!isBasicName(c.n)?+c.p*q*fxNow:0),m=metaOf(c);
   return{c,q,v,sets:[...m.sets],rar:[...m.rars][0]||c.r||'other'}})}
 const colKey=c=>c.ci.length==0?'Colourless':c.ci.length==1?c.ci[0]:'Multicolour';
 function donut(title,items,unit){
