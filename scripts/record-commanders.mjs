@@ -83,6 +83,23 @@ for (const n of cands.filter(stale)) {
   await sleep(1200); // be gentle: this is an unofficial endpoint
 }
 console.log(`EDHREC: ${ok} read, ${notFound} not found, ${failed} failed`);
+
+// 4. When was each commander first printed? Lets the app show how many decks it collects per year, so old and new cards compare fairly.
+let dated = 0;
+for (const n of cands) {
+  const have = out.cards[n];
+  if (have && have.d) continue;
+  try {
+    const q = '!"' + n.split(' // ')[0].replace(/"/g, '') + '" game:paper';
+    const r = await fetch('https://api.scryfall.com/cards/search?unique=prints&order=released&dir=asc&q=' + encodeURIComponent(q), { headers: UA });
+    if (r.ok) {
+      const j = await r.json(), d = j.data && j.data[0] && j.data[0].released_at;
+      if (d) { out.cards[n] = { ...(have || { t: new Date(0).toISOString() }), d }; dated++; }
+    }
+  } catch (e) {}
+  await sleep(120);
+}
+console.log(`First-printing dates: ${dated} added`);
 if (!ok && failed) { console.error('Nothing could be read from EDHREC, so the file was left as it was.'); process.exit(1); }
 fs.mkdirSync('data', { recursive: true });
 fs.writeFileSync(FILE, JSON.stringify(out));
