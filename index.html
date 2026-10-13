@@ -71,6 +71,8 @@ label.row input{margin-right:6px}
 .tchip.s{border-color:var(--gold);color:var(--gold)}
 .tchip.o{opacity:.55;text-decoration:line-through}
 .stars{color:var(--gold);letter-spacing:1px}
+.ctext{padding:8px 10px;margin:6px 0;border:1px solid var(--line);border-radius:6px;background:#0f1815;line-height:1.5}
+.plan mark{border-radius:3px;padding:0 2px;color:inherit}.ht{background:#5b4a14}.hm{background:#1f4a5b}.hy{background:#4a2a5b}.hg{background:#3a3a3a;text-decoration:line-through}
 .plan input,.plan select{background:#0f1815;color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
 .view{display:grid;gap:16px}
 .tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
@@ -175,7 +177,7 @@ dialog{background:var(--panel);color:var(--tx);border:1px solid var(--line);bord
 <div class="list" id="deck"></div>
 </div>
 <div class="side">
-<div class="tabs"><button id="tabU" class="on">Top 20 swaps</button><button id="tabD">My collection</button></div>
+<div class="tabs"><button id="tabU" class="on">Best fits</button><button id="tabD">My collection</button></div>
 <div id="tup" class="panel"></div>
 <div id="tdeck" class="panel" hidden>
 <h2>Your collection</h2>
@@ -378,7 +380,7 @@ function showCmds(){
 $('#csort').onchange=showCmds;
 $('#clist').onclick=e=>{const b=e.target.closest('[data-c]');if(!b)return;
  cmd=lib.find(c=>c.n==decodeURIComponent(b.dataset.c));
- deck=new Map();basics={};ups=null;upsFailed=false;sc.clear();
+ deck=new Map();basics={};ups=null;upsFailed=false;sc.clear();popBuyFor='';popBuy=new Map();
  readCmdr();syncBars();$('#s3').hidden=false;tab(true);render();$('#s3').scrollIntoView({behavior:'smooth'})};
 
 // ---------- card logic ----------
@@ -434,7 +436,7 @@ function setFocus(){const txt=cmd.o.toLowerCase().split(/\n|\.\s/).filter(x=>!/\
  typeFocus=TYPEF.filter(x=>x.d.test(txt)).map(x=>({...x,cre:new RegExp('\\b'+x.n+' creatures?\\b').test(txt)}))}
 async function loadTypes(){if(types.length)return;try{const c=localStorage.getItem('mtg-types');if(c){types=JSON.parse(c);return}const r=await fetch('https://api.scryfall.com/catalog/creature-types');types=(await r.json()).data||[];localStorage.setItem('mtg-types',JSON.stringify(types))}catch(e){}}
 function tribeRe(t){const v=[t,t+'s',t+'es'];if(/f$/.test(t))v.push(t.replace(/f$/,'ves'));if(/fe$/.test(t))v.push(t.replace(/fe$/,'ves'));if(/y$/.test(t))v.push(t.replace(/y$/,'ies'));return new RegExp('\\b('+v.map(x=>x.replace(/[^a-z]/g,'.?')).join('|')+')\\b','i')}
-let tstr='strong',allTribes=[],granted=[],cmdPop=null;
+let tstr='strong',allTribes=[],granted=[],cmdPop=null,allProfs=[],allTypes=[];
 const TSTR={strong:1,moderate:.55,off:0};
 const reEsc=x=>x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 // Oracle text with reminder text removed and the card's own name replaced by ~ (so "Gishath, Sun's Avatar" doesn't read as an Avatar deck)
@@ -459,14 +461,17 @@ function detectTribes(c){
  res.sort((a,b)=>b.sc-a.sc);
  return res.map((x,i)=>({...x,st:i==0?'p':(i<3&&x.sc>=.5?'s':'o')}))}
 function mkTribe(t,st){return {t,st,re:tribeRe(t),tre:new RegExp('\\b'+t.replace(/[^a-z]/g,'.?')+'\\b')}}
-function applyPlan(){tribes=allTribes.filter(x=>x.st!='o');sc.clear()}
+function applyPlan(){tribes=allTribes.filter(x=>x.st!='o');
+ const L=tstr=='moderate'?.6:1;
+ profiles=allProfs.filter(x=>x.st!='o').map(x=>({...x.p,m:(x.st=='p'?1.2:.6)*L}));
+ typeFocus=allTypes.filter(x=>x.st!='o').map(x=>({...x.f,m:(x.st=='p'?1:.5)*L}));sc.clear()}
 function readCmdr(){
  const txt=cleanText(cmd);
  kws=new Set(((txt+' '+(cmd.t.split('\u2014')[1]||'')).toLowerCase().match(/[a-z+\/\-]{4,}/g)||[]).filter(w=>!STOP.has(w)));
  allTribes=detectTribes(cmd).map(x=>mkTribe(x.t,x.st));
  granted=grantedKw(txt);
- profiles=PROFILES.filter(p=>p.d.test(txt.toLowerCase())&&!granted.some(g=>g.p==p.n));
- setFocus();tstr=allTribes.length?'strong':'off';
+ allProfs=PROFILES.filter(p=>p.d.test(txt.toLowerCase())&&!granted.some(g=>g.p==p.n)).map((p,i)=>({p,st:i<2?'p':'s'}));
+ setFocus();allTypes=typeFocus.map(f=>({f,st:'p'}));tstr='strong';
  const pd=popData&&popData[cmd.n];cmdPop=pd&&pd.c&&pd.c.length?new Map(pd.c.map(([n,p])=>[n.split(' // ')[0].toLowerCase(),p])):null;
  applyPlan();renderPlan()}
 const STOP=new Set('target,your,that,this,each,card,cards,when,whenever,with,from,have,until,control,controls,battlefield,creature,creatures,enters,player,players,their,then,they,them,into,more,does,pay,gets,without,time,turn,end,may,instead,other,only,also,would,least,number,long,graveyard,library,hand,owner,spell,spells,permanent,permanents,abilities,ability,mana,legendary,{t}'.split(','));
@@ -481,27 +486,59 @@ function tribeRole(c){if(!tribes.length||!TSTR[tstr])return'';const st=(c.t.spli
  for(const x of tribes){const mem=(isC&&x.tre.test(st))||(isC&&/changeling/i.test(c.o));
   if(mem){if(x.st=='p')return'p';r=r||'s'}else if(x.re.test(cleanText(c))&&!r)r=x.st=='p'?'pay':'';}
  return r}
+// The commander's text with the parts the builder acts on highlighted.
+function markUp(text,rules){
+ const R=[];rules.forEach((ru,pri)=>{const re=new RegExp(ru.re.source,'gi');let m;while((m=re.exec(text))){if(!m[0].length){re.lastIndex++;continue}R.push({a:m.index,b:m.index+m[0].length,cls:ru.cls,tip:ru.tip,pri})}});
+ R.sort((x,y)=>x.a-y.a||x.pri-y.pri||(y.b-y.a)-(x.b-x.a));
+ let out='',pos=0;const eh=t=>esc(t).replace(/\n/g,'<br>');
+ for(const r of R){if(r.a<pos)continue;out+=eh(text.slice(pos,r.a))+`<mark class="${r.cls}" title="${esc(r.tip)}">${eh(text.slice(r.a,r.b))}</mark>`;pos=r.b}
+ return out+eh(text.slice(pos))}
+function cmdrTextHtml(){
+ const stn={p:'main',s:'secondary',o:'off'};
+ const rules=[
+  ...granted.map(g=>({re:new RegExp('\\b'+g.k+'\\b'),cls:'hg',tip:'Given to your creatures, so cards that already have it are not favoured'})),
+  ...allTribes.map(x=>({re:tribeRe(x.t),cls:'ht',tip:'Creature type ('+stn[x.st]+')'})),
+  ...allProfs.map(x=>({re:x.p.d,cls:'hm',tip:'Mechanic: '+x.p.n+' ('+stn[x.st]+')'})),
+  ...allTypes.map(x=>({re:x.f.d,cls:'hy',tip:'Card type: '+x.f.n+' ('+stn[x.st]+')'}))];
+ const txt=cmd.o.replace(/\([^)]*\)/g,'');
+ return`<div class="ctext"><b>${esc(cmd.n)}</b> <span class="m">${esc(cmd.mc||'')}</span><br><i>${esc(cmd.t)}</i><br>${markUp(txt,rules)}</div>
+ <div class="m"><mark class="ht">creature type</mark> <mark class="hm">mechanic</mark> <mark class="hy">card type</mark> <mark class="hg">given to your creatures</mark> &nbsp; Hover a highlight to see how it is read.</div>`}
+function themeChip(kind,i,label,st){return`<button class="tchip ${st}" data-th="${kind}:${i}" aria-label="${esc(label)}: ${st=='p'?'main theme':st=='s'?'secondary theme':'off'}. Click to change." title="Click to cycle main, secondary and off">${esc(label)} · ${st=='p'?'main':st=='s'?'side':'off'}</button>`}
 function renderPlan(){
  const el=$('#plan');if(!el)return;
- const r=rateOf(cmd),chips=allTribes.map((x,i)=>`<button class="tchip ${x.st}" data-ti="${i}" aria-label="${x.t}: ${x.st=='p'?'main tribe':x.st=='s'?'secondary tribe':'off'}. Click to change." title="Click to cycle main / secondary / off">${x.t[0].toUpperCase()+x.t.slice(1)} \u00b7 ${x.st=='p'?'main':x.st=='s'?'side':'off'}</button>`).join('');
+ const r=rateOf(cmd),cap=x=>x[0].toUpperCase()+x.slice(1);
+ const tChips=allTribes.map((x,i)=>themeChip('t',i,cap(x.t),x.st)).join(''),mChips=allProfs.map((x,i)=>themeChip('m',i,cap(x.p.n),x.st)).join(''),yChips=allTypes.map((x,i)=>themeChip('y',i,cap(x.f.n)+(x.f.cre?' creatures':''),x.st)).join('');
+ const haveM=new Set(allProfs.map(x=>x.p.n)),haveY=new Set(allTypes.map(x=>x.f.n));
  el.innerHTML=`<h4>How the builder reads this commander</h4>
+ ${cmdrTextHtml()}
+ <div class="m"><span class="stars" aria-label="${r.stars} out of 5 stars">${starStr(r.stars)}</span> <b>${r.label}</b> as a commander. ${r.why.join('. ')}.</div>
  ${popOf(cmd)!=null?`<div class="m"><b>${popOf(cmd)?fmtN(popOf(cmd))+' decks':'No decks'}</b> on EDHREC use this commander.</div>`:''}
  ${(()=>{const f=fitOf(cmd);return f?`<div class="m"><b>You own ${f.pct}%</b> of the cards people most often play with this commander (${f.n} of ${f.of}). The builder prefers those cards.</div>`:''})()}
- <div class="chips" role="group" aria-label="Creature types to build around">${chips||'<span class="m">No creature type to build around was found in its text.</span>'}</div>
- <div class="m">Click a type to switch it between main tribe, secondary and off. ${allTribes.length?'':'You can still add one below.'}</div>
+ <h4>What to build around</h4>
+ ${tChips?`<div class="m">Creature types</div><div class="chips">${tChips}</div>`:''}
+ ${mChips?`<div class="m">Mechanics</div><div class="chips">${mChips}</div>`:''}
+ ${yChips?`<div class="m">Card types</div><div class="chips">${yChips}</div>`:''}
+ ${tChips||mChips||yChips?'':'<div class="m">Nothing specific was found in its text. Add a theme below.</div>'}
+ <div class="m">Click a theme to switch it between main, secondary and off. Main themes pull in the most cards.</div>
  <div class="chips"><input id="addT" list="typeList" placeholder="Add a creature type" aria-label="Add a creature type"><datalist id="typeList">${types.map(t=>`<option value="${t}">`).join('')}</datalist><button class="alt" id="addTb">Add</button>
- <label class="m">Tribal strength <select id="tstr"><option value="strong">Strong</option><option value="moderate">Moderate</option><option value="off">Off</option></select></label></div>
+ <select id="addM" aria-label="Add a mechanic or card type"><option value="">Add a mechanic or card type…</option><optgroup label="Mechanics">${PROFILES.filter(p=>!haveM.has(p.n)).map(p=>`<option value="m:${p.n}">${cap(p.n)}</option>`).join('')}</optgroup><optgroup label="Card types">${TYPEF.filter(x=>!haveY.has(x.n)).map(x=>`<option value="y:${x.n}">${cap(x.n)}</option>`).join('')}</optgroup></select>
+ <label class="m">How hard to lean in <select id="tstr"><option value="strong">Fully</option><option value="moderate">Moderately</option></select></label></div>
  ${granted.length?`<div class="m">This commander gives other creatures ${[...new Set(granted.map(g=>g.k))].join(', ')}, so cards that merely have ${granted.length>1?'those':'that'} aren't favoured.</div>`:''}
  <div class="m">Changes rebuild the deck if one has been built.</div>`;
  $('#tstr').value=tstr;
 }
 function planChanged(){applyPlan();renderPlan();if(deck.size)auto();else render()}
-$('#plan').addEventListener('click',e=>{const b=e.target.closest('[data-ti]');
- if(b){const x=allTribes[+b.dataset.ti],hasP=allTribes.some(y=>y!==x&&y.st=='p');x.st=x.st=='p'?'s':x.st=='s'?'o':'p';if(x.st=='p')allTribes.forEach(y=>{if(y!==x&&y.st=='p')y.st='s'});planChanged();return}
+$('#plan').addEventListener('click',e=>{const b=e.target.closest('[data-th]');
+ if(b){const [k,i]=b.dataset.th.split(':'),L=k=='t'?allTribes:k=='m'?allProfs:allTypes,x=L[+i];x.st=x.st=='p'?'s':x.st=='s'?'o':'p';
+  if(k=='t'&&x.st=='p')allTribes.forEach(y=>{if(y!==x&&y.st=='p')y.st='s'});planChanged();return}
  if(e.target.id=='addTb'){const v=$('#addT').value.trim().toLowerCase();if(!v)return;const ex=allTribes.find(x=>x.t==v);
-  if(ex)ex.st=allTribes.some(y=>y.st=='p'&&y!==ex)?'s':'p';else allTribes.push(mkTribe(v,allTribes.some(y=>y.st=='p')?'s':'p'));
-  if(tstr=='off')tstr='strong';planChanged()}});
-$('#plan').addEventListener('change',e=>{if(e.target.id=='tstr'){tstr=e.target.value;planChanged()}});
+  if(ex)ex.st=allTribes.some(y=>y.st=='p'&&y!==ex)?'s':'p';else allTribes.push(mkTribe(v,allTribes.some(y=>y.st=='p')?'s':'p'));planChanged()}});
+$('#plan').addEventListener('change',e=>{
+ if(e.target.id=='tstr'){tstr=e.target.value;planChanged()}
+ if(e.target.id=='addM'&&e.target.value){const [k,n]=e.target.value.split(':');
+  if(k=='m'){const p=PROFILES.find(x=>x.n==n);if(p)allProfs.push({p,st:'p'})}
+  else{const x=TYPEF.find(y=>y.n==n);if(x)allTypes.push({f:{...x,cre:false},st:'p'})}
+  planChanged()}});
 
 // ---------- commander rating ----------
 // How good a card is AS A COMMANDER: a lasting ability and a clear plan to build around. Pure power (Abigale) doesn't count.
@@ -545,8 +582,8 @@ function ev(c){
  const o=c.o.toLowerCase(),why=[],th=tribeHit(c);let v=th;if(th)why.push('tribe');
  const pw=/Creature/.test(c.t)?(parseInt(c.pw)||0):0;
  const np=/Instant|Sorcery/.test(c.t.split(' // ')[0]);
- profiles.forEach(p=>{let x=0;p.w.forEach(([re,w,po])=>{if(re.test(o)&&!(po&&np))x+=w});const cr=/Creature/.test(c.t.split(' // ')[0]);if(p.big&&pw>3)x+=p.big*Math.min(pw-3,6)/2;if(p.hi&&cr&&c.cmc>4)x+=p.hi*Math.min(c.cmc-4,5);if(p.lo&&cr&&c.cmc<=3)x-=p.lo;if(x>0){v+=Math.min(x,14);why.push(p.n)}else if(x<0)v+=x;});
- const ft=c.t.split(' // ')[0];typeFocus.forEach(f=>{if(f.ty.test(ft)){v+=5;why.push(f.n);if(f.cre&&/Creature/.test(ft))v+=6}});
+ profiles.forEach(p=>{let x=0;p.w.forEach(([re,w,po])=>{if(re.test(o)&&!(po&&np))x+=w});const cr=/Creature/.test(c.t.split(' // ')[0]);if(p.big&&pw>3)x+=p.big*Math.min(pw-3,6)/2;if(p.hi&&cr&&c.cmc>4)x+=p.hi*Math.min(c.cmc-4,5);if(p.lo&&cr&&c.cmc<=3)x-=p.lo;if(x>0){v+=Math.min(x,14)*(p.m??1);why.push(p.n)}else if(x<0)v+=x;});
+ const ft=c.t.split(' // ')[0];typeFocus.forEach(f=>{if(f.ty.test(ft)){const fm=f.m??1;v+=5*fm;why.push(f.n);if(f.cre&&/Creature/.test(ft))v+=6*fm}});
  const w=new Set((o+' '+c.t.toLowerCase()).match(/[a-z+\/\-]{4,}/g)||[]);let g=0;kws.forEach(k=>{if(w.has(k))g++});v+=Math.min(g,5)*.5;
  v+=c.er?Math.max(0,10-2.5*Math.log10(c.er))*.6:0;
  v-=Math.max(0,c.cmc-6)*.4;
@@ -625,7 +662,7 @@ function render(){
  sg=sg.sort(sorter(flt.sortS));
  $('#scount').textContent=active(terms)?`${sg.length} card${sg.length==1?'':'s'} match${fit?' and fit this commander':''}`:`${sg.length} cards that fit and aren't in the deck yet`;
  $('#sugg').innerHTML=sg.slice(0,200).map(c=>{const d=deck.has(c.n);return `<div class="row" tabindex="0" ${d?'data-rm':'data-add'}="${enc(c.n)}" title="${d?'In deck. Click to remove':'Click to add'}">${rowHtml(c)}<span class="c">${d?'in deck \\u00b7 ':''}${c.mc}<button class="info" data-info="${enc(c.n)}" aria-label="Show details for ${c.n}">i</button></span></div>`}).join('')||'<p class="m">No matching cards.</p>';
- if(!$('#tup').hidden&&deck.size){ups||upsFailed?renderUps():loadUps()}}
+ if(!$('#tup').hidden&&deck.size){if(cmdPop){renderUps();loadPopBuy()}else ups||upsFailed?renderUps():loadUps()}}
 const act=e=>{if(e.target.closest('[data-info]'))return;const t=e.target.closest('[data-rm],[data-add],[data-b]');if(!t)return;
  if(t.dataset.rm)deck.delete(decodeURIComponent(t.dataset.rm));
  else if(t.dataset.add){const c=lib.find(x=>x.n==decodeURIComponent(t.dataset.add));deck.set(c.n,c)}
@@ -636,6 +673,41 @@ const act=e=>{if(e.target.closest('[data-info]'))return;const t=e.target.closest
 // ---------- top 20 swaps ----------
 const eur=v=>v?'£'+(+v*fxNow).toFixed(2):'n/a';
 let curSw=[],loadingUps=false,upsFailed=false;
+// With EDHREC data for the commander, swaps come from the cards its decks actually play.
+const popPct=n=>cmdPop?cmdPop.get(n.split(' // ')[0].toLowerCase())||0:0;
+let popBuy=new Map(),popBuyFor='',popBuyBusy=false,popBuyFail=false;
+async function loadPopBuy(){
+ if(!cmdPop||popBuyBusy||popBuyFor==cmd.n)return;popBuyBusy=true;const mine=cmd.n;popBuy=new Map();popBuyFail=false;
+ try{const own=ownedSet(),names=popData[mine].c.map(x=>x[0]).filter(n=>!own.has(n.split(' // ')[0].toLowerCase())&&!own.has(n.toLowerCase())).slice(0,70);
+  for(let i=0;i<names.length;i+=75){const data=await post(names.slice(i,i+75).map(n=>({name:n.split(' // ')[0]})));data.forEach(c=>{const sl=slim(c);popBuy.set(sl.n.split(' // ')[0].toLowerCase(),sl)});await sleep(120)}
+ }catch(e){popBuyFail=true}
+ popBuyBusy=false;popBuyFor=mine;if(cmd&&cmd.n==mine&&!$('#tup').hidden)renderUps()}
+function swapsPop(){
+ const own=ownedSet(),list=popData[cmd.n].c,out=[...deck.values()].filter(c=>cat(c)!='Land').map(c=>({c,g:grp(c),k:popPct(c.n)+.4*score(c)}));
+ const used=new Set(),ub={},res={own:[],buy:[]};
+ const pick=(isOwn,lim)=>{let n=0;
+  for(const [nm,p] of list){if(n>=lim)break;if(p<10)continue;const k=nm.split(' // ')[0].toLowerCase();
+   const c=isOwn?lib.find(x=>x.n.split(' // ')[0].toLowerCase()==k&&(qty.get(x.n)||0)>0):popBuy.get(k);
+   if(!c||c.n==cmd.n||deck.has(c.n)||/Basic/.test(c.t)||!(c.l=='legal'||c.l=='restricted'))continue;
+   const g=grp(c);let o=null;
+   if(g=='Land'){const b=Object.entries(basics).filter(([bn,q])=>q-(ub[bn]||0)>0).sort((x,y)=>y[1]-x[1])[0];if(!b)continue;o={c:{n:b[0],basic:1},k:0}}
+   else{let best=null;out.forEach(y=>{if(y.g==g&&!used.has(y.c.n)&&(!best||y.k<best.k))best=y});o=best}
+   if(!o||p-popPct(o.c.n)<8)continue;
+   if(o.c.basic)ub[o.c.n]=(ub[o.c.n]||0)+1;else used.add(o.c.n);
+   res[isOwn?'own':'buy'].push({u:c,o:o.c,p,po:popPct(o.c.n),own:isOwn});n++}};
+ pick(true,20);pick(false,10);return res}
+function swapRow(s,i){const u=s.u;
+ return `<div class="row swap" data-n="${enc(u.n)}"><div><b>${u.n}</b> <span class="m">${u.mc}</span><br><span class="m">in ${s.p}% of its decks · replaces ${s.o.n}${s.o.basic?' (basic)':` (${s.po}%)`}</span></div><div class="c">${s.own?'Owned':eur(u.p)} ${!s.own&&u.cm?`<a href="${u.cm}" target="_blank" rel="noopener" style="color:var(--gold)">Cardmarket</a>`:''} <button class="info" data-info="${enc(u.n)}" aria-label="Show details for ${u.n}">i</button><button data-sw="${i}">Swap</button></div></div>`}
+function renderBestFits(){
+ const el=$('#tup'),r=swapsPop();curSw=[...r.own,...r.buy];
+ const cost=r.buy.reduce((a,s)=>a+(+s.u.p||0),0);
+ let h=`<h2>Best fits for ${cmd.n}</h2><p class="m">These are the cards played most often in the ${fmtN(popData[cmd.n].decks||0)} EDHREC decks for this commander. Each suggestion replaces the card in your deck that is least played with this commander. Prices are Cardmarket averages from Scryfall, in pounds, refreshed daily.</p>`;
+ h+=`<h3>In your collection (${r.own.length})</h3>`+(r.own.length?`<div class="tools"><button id="swown">Apply all</button></div>`+r.own.map((s,i)=>swapRow(s,i)).join(''):'<p class="m">Your deck already has the popular cards you own, or the deck is empty.</p>');
+ h+=`<h3>Worth buying (${r.buy.length})</h3>`;
+ if(popBuyBusy)h+='<p class="m">Looking up prices…</p>';
+ else if(popBuyFail)h+='<p class="m">Could not reach Scryfall for prices.</p>';
+ else h+=r.buy.length?`<div class="tools"><strong>about ${eur(cost)}</strong><button id="swbuy">Apply all</button><button class="alt" id="wcopy">Copy buy list</button></div>`+r.buy.map((s,i)=>swapRow(s,r.own.length+i)).join(''):'<p class="m">Nothing popular and missing would improve this deck.</p>';
+ el.innerHTML=h}
 async function loadUps(){
  if(loadingUps)return;loadingUps=true;
  const el=$('#tup'),ci=cmd.ci.length?cmd.ci.join('').toLowerCase():'c',base=`id<=${ci} f:commander -t:basic `,Q=[];
@@ -671,6 +743,7 @@ function swaps(){
 function doSwap(s){if(s.o.basic)basics[s.o.n]=Math.max(0,(basics[s.o.n]||0)-1);else deck.delete(s.o.n);deck.set(s.u.n,s.u)}
 function renderUps(){
  const el=$('#tup');
+ if(deck.size&&cmdPop&&popData&&popData[cmd.n]){renderBestFits();return}
  if(!deck.size){el.innerHTML='<h2>Top 20 swaps</h2><p class="m">Build a deck first: click Auto-build on the Deck tab, then come back here.</p>';return}
  if(upsFailed){curSw=[];el.innerHTML='<h2>Top 20 swaps</h2><p class="m">Couldn\'t reach Scryfall for upgrade suggestions. Your deck is unaffected.</p><button id="retryUps">Try again</button>';return}
  curSw=swaps();
@@ -684,8 +757,10 @@ $('#tup').onclick=async e=>{const t=e.target;
  if(t.dataset&&t.dataset.sw!==undefined){doSwap(curSw[+t.dataset.sw]);render();renderUps()}
  else if(t.id=='retryUps'){upsFailed=false;loadUps()}
  else if(t.id=='swall'){curSw.forEach(doSwap);render();renderUps()}
+ else if(t.id=='swown'){curSw.filter(s=>s.own).forEach(doSwap);render();renderUps()}
+ else if(t.id=='swbuy'){curSw.filter(s=>!s.own).forEach(doSwap);render();renderUps()}
  else if(t.id=='wcopy'){try{await navigator.clipboard.writeText(curSw.filter(s=>!ownSet.has(s.u.n)).map(s=>'1 '+s.u.n).join('\n'));t.textContent='Copied'}catch(x){t.textContent='Copy failed'}}};
-function tab(u){$('#tdeck').hidden=u;$('#tup').hidden=!u;$('#tabD').classList.toggle('on',!u);$('#tabU').classList.toggle('on',u);if(u){if(!deck.size||ups||upsFailed)renderUps();else loadUps()}}
+function tab(u){$('#tdeck').hidden=u;$('#tup').hidden=!u;$('#tabD').classList.toggle('on',!u);$('#tabU').classList.toggle('on',u);if(u){if(cmdPop&&deck.size){renderUps();loadPopBuy()}else if(!deck.size||ups||upsFailed)renderUps();else loadUps()}}
 $('#tabD').onclick=()=>tab(false);$('#tabU').onclick=()=>tab(true);
 
 // ---------- collection search ----------
