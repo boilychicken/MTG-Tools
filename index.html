@@ -465,6 +465,8 @@ P('cascade',/\bcascade\b|\bdiscover\b/,[[/\bcascade\b|\bdiscover (\d|x)/,6],[/wi
 P('drain',/each opponent loses|each opponent[^.]{0,40}loses|opponents lose\b|whenever (an opponent|a player|you) loses? life|\bdrains?\b/,[[/each opponent loses|opponents lose\b|drain/,4],[/whenever (an opponent|a player|you|each opponent) loses? life|loses? life this turn/,4],[/gain (\d+|x|that much|life equal)|gains? life/,2],[/each opponent|each other player/,1]],{q:'(o:"each opponent loses" or o:"whenever an opponent loses life")'}),
 P('bigspells',/(?:mana value|converted mana cost)\s*(?:of\s*)?\d+\s*or\s*(?:greater|more)|(?:its|that card's|their) mana value/,[[/./,0]],{mv:'ge',ramp:13,lab:()=>'Spells costing '+mvRule.n+'+'}),
 P('cheapspells',/(?:mana value|converted mana cost)\s*(?:of\s*)?\d+\s*or\s*(?:less|fewer|lower)/,[[/./,0]],{mv:'le',lab:()=>'Spells costing '+mvRule.n+' or less'}),
+P('smallcreatures',/(?:power or toughness|power|toughness)\s*\d+\s*or\s*(?:less|fewer|lower)/,[[/\+\d+\/\+0|\+x\/\+0|equipped creature gets \+\d+\/\+0/,3],[/whenever [^.]{0,60}deals combat damage to (a|an|that|target) (player|opponent)/,4],[/\bequip\b|equipment/,1.5],[/\+1\/\+1 counter|\+\d+\/\+\d+/,-1.5]],{stat:'small',lab:()=>'Creatures with '+statRule.w+' '+statRule.n+' or less',q:()=>'t:creature '+(statRule.w=='power'?'pow<='+statRule.n:statRule.w=='toughness'?'tou<='+statRule.n:'(pow<='+statRule.n+' or tou<='+statRule.n+')')}),
+P('bigcreatures',/(?:power or toughness|power|toughness)\s*\d+\s*or\s*(?:greater|more)/,[[/\+\d+\/\+\d+|\+1\/\+1 counter|double[^.]{0,20}power/,3],[/proliferate/,2],[/whenever [^.]{0,60}deals combat damage to (a|an|that|target) (player|opponent)/,2]],{stat:'big',lab:()=>'Creatures with '+statRule.w+' '+statRule.n+' or more',q:()=>'t:creature '+(statRule.w=='toughness'?'tou>='+statRule.n:statRule.w=='power'?'pow>='+statRule.n:'(pow>='+statRule.n+' or tou>='+statRule.n+')')}),
 P('vehicles',/\bcrew\b|vehicle/,[[/\bcrew\b|vehicle/,4],[/artifact/,1]],{q:'(o:crew or t:vehicle)'})
 ];
 // Types the commander cares about (e.g. "artifact creatures you control get +2/+2"): reward cards of that type.
@@ -477,11 +479,18 @@ async function loadTypes(){if(types.length)return;try{const c=localStorage.getIt
 function tribeRe(t){const v=[t,t+'s',t+'es'];if(/f$/.test(t))v.push(t.replace(/f$/,'ves'));if(/fe$/.test(t))v.push(t.replace(/fe$/,'ves'));if(/y$/.test(t))v.push(t.replace(/y$/,'ies'));return new RegExp('\\b('+v.map(x=>x.replace(/[^a-z]/g,'.?')).join('|')+')\\b','i')}
 let tstr='strong',allTribes=[],granted=[],cmdPop=null,allProfs=[],allTypes=[],hiddenProf=[];
 // 3 = multiplayer (the usual Commander pod), 1 = playing 1v1. Some commanders are much weaker against a single opponent.
-let opps=3,mvRule=null;try{if(localStorage.getItem('mtg-pod')=='duel')opps=1}catch(e){}
+let opps=3,mvRule=null,statRule=null;try{if(localStorage.getItem('mtg-pod')=='duel')opps=1}catch(e){}
 // "mana value 6 or greater" / "mana value 3 or less" in the commander's text: how big or small its spells should be. 'soft' = only "equal to its mana value".
 function mvParse(txt){const t=txt.toLowerCase();let m=t.match(/(?:mana value|converted mana cost)\s*(?:of\s*)?(\d+)\s*or\s*(?:greater|more)/);if(m)return{dir:'ge',n:+m[1]};
  m=t.match(/(?:mana value|converted mana cost)\s*(?:of\s*)?(\d+)\s*or\s*(?:less|fewer|lower)/);if(m)return{dir:'le',n:+m[1]};
  if(/(?:equal to|its|that card's) (?:its |that card's )?mana value/.test(t))return{dir:'ge',n:5,soft:true};return null}
+// "creatures you control with power or toughness 1 or less": which size of creature the commander rewards, ignoring text about targets and opponents' creatures.
+function statParse(txt){const ss=txt.toLowerCase().split(/\n|\.\s/).filter(x=>/(you control|you cast|your |spells? you)/.test(x)&&!/\b(destroy|exile|counter|fights?|deals? \d* ?damage)\b[^.]*\btarget\b|opponents? controls?|can't block|can't attack/.test(x));
+ for(const sn of ss){const m=sn.match(/(power or toughness|power|toughness)\s*(\d+)\s*or\s*(less|fewer|lower|greater|more)/);if(m)return{kind:/less|fewer|lower/.test(m[3])?'small':'big',w:m[1],n:+m[2]}}
+ return null}
+function statHit(c){if(!statRule||!/Creature/.test(c.t.split(' // ')[0]))return false;const pw=parseFloat(c.pw),tg=parseFloat(c.tg),n=statRule.n,sm=statRule.kind=='small';
+ const a=isNaN(pw)?null:(sm?pw<=n:pw>=n),b=isNaN(tg)?null:(sm?tg<=n:tg>=n);
+ return statRule.w=='power'?a===true:statRule.w=='toughness'?b===true:(a===true||b===true)}
 // Mechanics that only work with several opponents are switched off for 1v1 (and back on when you switch again).
 function podAdjust(){allProfs.forEach(x=>{if(x.p.mp){if(opps==1){if(x.st!='o'){x.pre=x.st;x.st='o'}}else if(x.pre){x.st=x.pre;x.pre=null}}})}
 const TSTR={strong:1,moderate:.55,off:0};
@@ -528,6 +537,7 @@ function pickProfiles(txt){
  const donates=/(opponents?|players?) gains? control/.test(restT);
  PROFILES.forEach(p=>{if(granted.some(g=>g.p==p.n)||!p.w.length)return;
   if(p.mv&&(!mvRule||mvRule.dir!=p.mv))return;
+  if(p.stat&&(!statRule||statRule.kind!=p.stat))return;
   if(p.n=='cheat'&&donates)return;   // the permanents go to your opponents, so it isn't cheating things in for yourself
   const base=p.n=='etb'?noEtb:p.n=='counters'?restT.replace(/counters? on ~/g,''):p.n=='spells'?restT.replace(/(whenever|when) you cast [^.]*creature spells?/g,''):restT;   // counters it puts on itself aren't a counters theme
   if(p.d.test(base)){let n=(base.match(new RegExp(p.d.source,'g'))||[]).length,low=false;
@@ -546,7 +556,7 @@ function readCmdr(){
  kws=new Set(((txt+' '+(cmd.t.split('\u2014')[1]||'')).toLowerCase().match(/[a-z+\/\-]{4,}/g)||[]).filter(w=>!STOP.has(w)));
  allTribes=detectTribes(cmd).map(x=>mkTribe(x.t,x.st));
  granted=grantedKw(txt);
- mvRule=mvParse(txt);
+ mvRule=mvParse(txt);statRule=statParse(txt);
  const pp=pickProfiles(txt);allProfs=pp.filter(x=>!x.kw).map(({p,st})=>({p,st}));
  // the commander's own keywords (e.g. Flying) are not a theme, but cards with them still score a little
  hiddenProf=[...PROFILES.filter(p=>!p.w.length&&p.d.test(txt.toLowerCase())).map(p=>({...p,hid:true})),...pp.filter(x=>x.kw).map(x=>({...x.p,m:.4,hid:true}))];
@@ -603,7 +613,7 @@ function renderPlan(){
  ${tChips||mChips||yChips?'':'<div class="m">Nothing specific was found in its text. Add a theme below.</div>'}
  <div class="m">Click a theme to switch it between main, secondary and off. Main themes pull in the most cards.</div>
  <div class="chips"><input id="addT" list="typeList" placeholder="Add a creature type" aria-label="Add a creature type"><datalist id="typeList">${types.map(t=>`<option value="${t}">`).join('')}</datalist><button class="alt" id="addTb">Add</button>
- <select id="addM" aria-label="Add a mechanic or card type"><option value="">Add a mechanic or card type…</option><optgroup label="Mechanics">${PROFILES.filter(p=>!haveM.has(p.n)&&!p.mv).map(p=>`<option value="m:${p.n}">${cap(p.n)}</option>`).join('')}</optgroup><optgroup label="Card types">${TYPEF.filter(x=>!haveY.has(x.n)).map(x=>`<option value="y:${x.n}">${cap(x.n)}</option>`).join('')}</optgroup></select>
+ <select id="addM" aria-label="Add a mechanic or card type"><option value="">Add a mechanic or card type…</option><optgroup label="Mechanics">${PROFILES.filter(p=>!haveM.has(p.n)&&!p.mv&&!p.stat).map(p=>`<option value="m:${p.n}">${cap(p.n)}</option>`).join('')}</optgroup><optgroup label="Card types">${TYPEF.filter(x=>!haveY.has(x.n)).map(x=>`<option value="y:${x.n}">${cap(x.n)}</option>`).join('')}</optgroup></select>
  <label class="m">How hard to lean in <select id="tstr"><option value="strong">Fully</option><option value="moderate">Moderately</option></select></label> <label class="m">Playing <select id="pod"><option value="multi">Multiplayer</option><option value="duel">1v1</option></select></label></div>
  ${opps==1&&allProfs.some(x=>x.p.mp&&x.pre)?'<div class="m">Goad is switched off because you play 1v1: goaded creatures would only attack you.</div>':''}
  ${granted.length?`<div class="m">This commander gives other creatures ${[...new Set(granted.map(g=>g.k))].join(', ')}, so cards that merely have ${granted.length>1?'those':'that'} aren't favoured.</div>`:''}
@@ -690,6 +700,7 @@ function ev(c){
  const np=/Instant|Sorcery/.test(c.t.split(' // ')[0]);
  const inLand=/Land/.test(c.t.split(' // ')[0]);
  profiles.forEach(p=>{if(p.mv&&mvRule&&mvRule.dir==p.mv&&!inLand){const hit=p.mv=='ge'?c.cmc>=mvRule.n:c.cmc<=mvRule.n;if(hit){v+=(p.mv=='ge'?4:3)*(p.m??1)*(mvRule.soft?.5:1);why.push('mana value')}}
+  if(p.stat&&statRule&&statRule.kind==p.stat&&statHit(c)){v+=(p.stat=='small'?6:5)*(p.m??1);why.push('fits the size rule')}
   let x=0;p.w.forEach(([re,w,po])=>{if(re.test(o)&&!(po&&np))x+=w});const cr=/Creature/.test(c.t.split(' // ')[0]);if(p.big&&pw>3)x+=p.big*Math.min(pw-3,6)/2;if(p.hi&&cr&&c.cmc>4)x+=p.hi*Math.min(c.cmc-4,5);if(p.lo&&cr&&c.cmc<=3)x-=p.lo;if(x>0){v+=Math.min(x,14)*(p.m??1);why.push(p.n)}else if(x<0)v+=x;});
  const ft=c.t.split(' // ')[0];typeFocus.forEach(f=>{if(f.ty.test(ft)){const fm=f.m??1;v+=8*fm;why.push(f.n);if(f.cre&&/Creature/.test(ft))v+=10*fm}});
  const w=new Set((o+' '+c.t.toLowerCase()).match(/[a-z+\/\-]{4,}/g)||[]);let g=0;kws.forEach(k=>{if(w.has(k))g++});v+=Math.min(g,5)*.5;
@@ -722,6 +733,9 @@ function auto(){
  if(typeFocus.some(f=>f.n=='creature'&&f.st=='p'))C=Math.max(C,30);
  profiles.forEach(p=>{if(p.crt)C=Math.min(C,p.crt)});
  if(tr)C=Math.max(C,TQ.p+TQ.s+4);
+ // a commander that rewards small (or big) creatures: plenty of them, so it matters
+ const stp=profiles.find(p=>p.stat&&statRule&&statRule.kind==p.stat);let SQ=0;
+ if(stp){SQ=Math.round((statRule.kind=='small'?26:22)*Math.min(1,(stp.m??1)/1.2));C=Math.max(C,SQ+4)}
  const Ccap=C+3;
  // share of non-land slots per mana value: 0-1, 2, 3, 4, 5, 6, 7+ (caps include slack)
  const F=[.09,.21,.21,.17,.12,.09,.07],cap=F.map((f,i)=>Math.ceil(f*N*(i>=4&&(agg||tr)?1.4:1.25)));
@@ -738,6 +752,7 @@ function auto(){
   deck.set(c.n,c);n--;if(!land){cnt[b]++;nl++;if(isC(c))nc++}}};
  typeFocus.filter(f=>f.st=='p'&&f.m>=.5).forEach(f=>take(c=>nonL(c)&&f.ty.test(c.t.split(' // ')[0])&&(!f.cre||isC(c)),Math.round((f.n=='creature'?30:f.cre?18:12)*Math.min(1,f.m))));   // a main card-type theme comes first
  if(tr){take(c=>nonL(c)&&tribeRole(c)=='p',TQ.p);take(c=>nonL(c)&&tribeRole(c)=='pay',TQ.pay);take(c=>nonL(c)&&tribeRole(c)=='s',TQ.s)}   // the tribe comes first
+ if(SQ)take(c=>nonL(c)&&isC(c)&&statHit(c),SQ);   // the size rule's creatures come right after the tribe
  const have=k=>[...deck.values()].filter(c=>cat(c)==k).length;
  take(c=>cat(c)=='Ramp',R-have('Ramp'));take(c=>cat(c)=='Draw',D-have('Draw'));take(c=>cat(c)=='Removal',V-have('Removal'));if(W)take(c=>cat(c)=='Wipe',W-have('Wipe'));
  if(MQ)take(c=>nonL(c)&&c.cmc>=mvRule.n&&cat(c)!='Wipe',MQ-[...deck.values()].filter(c=>cat(c)!='Land'&&c.cmc>=mvRule.n).length);
@@ -827,7 +842,7 @@ async function loadUps(){
  if(loadingUps)return;loadingUps=true;
  const el=$('#tup'),ci=cmd.ci.length?cmd.ci.join('').toLowerCase():'c',base=`id<=${ci} f:commander -t:basic `,Q=[];
  if(tribes.length)Q.push(`(${tribes.map(x=>`t:${x.t} or o:${x.t}`).join(' or ')})`);
- profiles.slice(0,4).forEach(p=>p.q&&Q.push(...[].concat(p.q)));
+ profiles.slice(0,4).forEach(p=>{const q=typeof p.q=='function'?p.q():p.q;q&&Q.push(...[].concat(q))});
  typeFocus.slice(0,2).forEach(f=>Q.push('t:'+f.n+(f.cre?' t:creature':'')));
  Q.push('otag:ramp -t:land','otag:draw -t:land','otag:removal');
  if(!profiles.some(p=>p.agg))Q.push('otag:sweeper');
