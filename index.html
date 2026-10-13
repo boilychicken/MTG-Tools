@@ -162,7 +162,7 @@ dialog{background:var(--panel);color:var(--tx);border:1px solid var(--line);bord
 
 <section class="panel" id="s2" hidden>
 <h2>Choose a commander</h2>
-<div class="csrow"><input type="search" id="csearch" placeholder="Search your legendary creatures" aria-label="Search commanders"><select id="csort" aria-label="Sort commanders"><option value="az">A–Z</option><option value="fit">Best fit for my collection</option><option value="pop">Most decks</option><option value="rate">Decks per year since first printed</option><option value="old">Oldest first</option></select></div><p class="m" id="popNote"></p>
+<div class="csrow"><input type="search" id="csearch" placeholder="Search your legendary creatures" aria-label="Search commanders"><select id="csort" aria-label="Sort commanders"><option value="az">A–Z</option><option value="fit">Best fit for my collection</option><option value="pop">Most decks</option><option value="rate">Decks per month since first printed</option><option value="old">Oldest first</option></select></div><p class="m" id="popNote"></p>
 <div class="grid" id="clist"></div>
 </section>
 
@@ -388,19 +388,19 @@ async function loadFirst(){if(firstBusy||firstTried)return;
   try{localStorage.setItem('mtg-first',JSON.stringify(Object.fromEntries(firstMap)))}catch(e){}}
  catch(e){}
  firstBusy=false;if(!$('#tool-cmd').hidden)showCmds()}
-const yrsOld=c=>{const d=firstOf(c);return d?Math.max(1,(Date.now()-Date.parse(d))/(365.25*864e5)):null};
+const monthsOld=c=>{const d=firstOf(c);return d?Math.max(6,(Date.now()-Date.parse(d))/(30.44*864e5)):null};
 function showCmds(){
  loadPop();ownFront=null;fitCache.clear();
  const q=$('#csearch').value.toLowerCase(),by=$('#csort').value;
  if(by=='old'||by=='rate')loadFirst();
- const rk=c=>c.er>0?c.er:null,perYr=c=>{const d=popOf(c),y=yrsOld(c);return d!=null&&y?d/y:null},
-  key=c=>by=='fit'?(fitOf(c)?fitOf(c).pct:-1):by=='pop'?(popOf(c)!=null?popOf(c):rk(c)?1e6-rk(c):0):by=='rate'?(perYr(c)??-1):by=='old'?(firstOf(c)?-Date.parse(firstOf(c)):-1e15):0;
+ const rk=c=>c.er>0?c.er:null,perMo=c=>{const d=popOf(c),m=monthsOld(c);return d!=null&&m?d/m:null},
+  key=c=>by=='fit'?(fitOf(c)?fitOf(c).pct:-1):by=='pop'?(popOf(c)!=null?popOf(c):rk(c)?1e6-rk(c):0):by=='rate'?(perMo(c)??-1):by=='old'?(firstOf(c)?-Date.parse(firstOf(c)):-1e15):0;
  const l=lib.filter(c=>isCmdr(c)&&c.n.toLowerCase().includes(q)).sort((a,b)=>by!='az'?(key(b)-key(a)||a.n.localeCompare(b.n)):a.n.localeCompare(b.n));
  $('#popNote').textContent=(popData?'Deck counts and usual cards come from EDHREC, which gathers public deck lists from Moxfield, Archidekt and other sites. “You own” is the share of the cards people most often play with that commander that are in your collection, weighted by how often each is played.':'Showing EDHREC’s popularity rank (1 is the most played). Exact deck counts and “You own” percentages appear once the weekly commander job has run (see SETUP.md).')
-  +(by=='rate'?(popData?' “Decks per year” divides each commander’s deck count by the years since it was first printed, so a card from 2017 is not simply beaten by one that has had a few months to collect decks (anything under a year old counts as one year). Commanders with no known date or deck count come last.':' “Decks per year” needs deck counts, which appear once the weekly commander job has run.'):by=='old'?' Sorted by the year each commander was first printed.':'')
+  +(by=='rate'?(popData?' “Decks per month” divides each commander’s deck count by the months since it was first printed, so a card from 2017 is not simply beaten by one that has had a few months to collect decks (anything under six months old counts as six). Commanders with no known date or deck count come last.':' “Decks per month” needs deck counts, which appear once the weekly commander job has run.'):by=='old'?' Sorted by the year each commander was first printed.':'')
   +(firstBusy?' Looking up first-printing dates…':'');
- $('#clist').innerHTML=l.length?l.map(c=>{const pp=popOf(c),ft=fitOf(c),fd=firstOf(c),py=perYr(c);
-  return `<button class="cmd" data-c="${enc(c.n)}"><img src="${c.img}" alt=""><span>${c.n}<br><span class="m">${c.ci.join('')||'Colourless'}${pp!=null?' · '+(pp?fmtN(pp)+' decks':'no decks listed'):(c.er>0?' · EDHREC rank #'+fmtN(c.er):'')}${fd?' · first printed '+fd.slice(0,4):''}${by=='rate'&&py!=null?' · about '+fmtN(Math.round(py))+' decks a year':''}</span>${ft?`<br><span class="m"><b>You own ${ft.pct}%</b> of the usual cards (${ft.n} of ${ft.of})</span>`:''}</span></button>`}).join(''):'<p class="m">No legal commanders found in your collection.</p>';
+ $('#clist').innerHTML=l.length?l.map(c=>{const pp=popOf(c),ft=fitOf(c),fd=firstOf(c),py=perMo(c);
+  return `<button class="cmd" data-c="${enc(c.n)}"><img src="${c.img}" alt=""><span>${c.n}<br><span class="m">${c.ci.join('')||'Colourless'}${pp!=null?' · '+(pp?fmtN(pp)+' decks':'no decks listed'):(c.er>0?' · EDHREC rank #'+fmtN(c.er):'')}${fd?' · first printed '+fd.slice(0,4):''}${by=='rate'&&py!=null?' · about '+(py>=10?fmtN(Math.round(py)):py.toFixed(1))+' decks a month':''}</span>${ft?`<br><span class="m"><b>You own ${ft.pct}%</b> of the usual cards (${ft.n} of ${ft.of})</span>`:''}</span></button>`}).join(''):'<p class="m">No legal commanders found in your collection.</p>';
 }
 $('#csort').onchange=showCmds;
 // The creature-type list is only fetched during an import, so after a reload it is empty until something asks for it.
