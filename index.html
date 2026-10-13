@@ -62,7 +62,8 @@ label.row input{margin-right:6px}
 .chip.wide{width:auto;border-radius:8px;padding:0 12px;background:transparent;color:var(--tx);border:1px solid var(--line);opacity:1;font-weight:600}
 .chip.wide[aria-pressed=true]{background:var(--gold);color:#201a08;border-color:var(--gold)}
 .csrow{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.csrow input{flex:1;min-width:180px}.csrow select{background:#0f1815;color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:6px}
-.pwt{border-collapse:collapse;margin:6px 0;font-size:13px}.pwt th,.pwt td{border:1px solid var(--line);padding:3px 8px;text-align:left}
+.pwgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}.pwgrid label{display:grid;gap:3px;font-size:13px}.pwgrid input{background:#0f1815;color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:6px 8px;width:100%;box-sizing:border-box}
+.pwt tr.cur td{background:#2a2410;font-weight:700}.pwt{border-collapse:collapse;margin:6px 0;font-size:13px}.pwt th,.pwt td{border:1px solid var(--line);padding:3px 8px;text-align:left}
 .plan{margin:8px 0;padding:10px;border:1px solid var(--line);border-radius:8px;font-size:14px}
 .plan h4{margin:0 0 6px}.plan .chips{margin:6px 0}
 .tchip{border-radius:16px;padding:5px 12px;background:transparent;color:var(--tx);border:1px solid var(--line);font-weight:600}
@@ -118,6 +119,7 @@ dialog{background:var(--panel);color:var(--tx);border:1px solid var(--line);bord
 <button class="tile" data-tool="draft">40-card draft builder<br><span class="m">Turn a drafted pool into a deck, built around the cards you pick.</span></button>
 </div>
 <h4>Check and keep your decks</h4><div class="tiles">
+<button class="tile" data-tool="power">Power level calculator<br><span class="m">Score a Commander deck from 1 to 10 by pasting a list or typing in the card counts.</span></button>
 <button class="tile" data-tool="check" data-needs disabled>Deck checker<br><span class="m">Paste a decklist to see what you own, what the rest costs, and how healthy it is.</span></button>
 <button class="tile" data-tool="saved">Saved decks<br><span class="m">Your saved decks in folders. Open one to see what you own and what is still missing.</span></button>
 </div>
@@ -156,7 +158,7 @@ dialog{background:var(--panel);color:var(--tx);border:1px solid var(--line);bord
 
 <section class="panel" id="s2" hidden>
 <h2>Choose a commander</h2>
-<div class="csrow"><input type="search" id="csearch" placeholder="Search your legendary creatures" aria-label="Search commanders"></div>
+<div class="csrow"><input type="search" id="csearch" placeholder="Search your legendary creatures" aria-label="Search commanders"><select id="csort" aria-label="Sort commanders"><option value="az">A–Z</option><option value="fit">Best fit for my collection</option><option value="pop">Most popular first</option></select></div><p class="m" id="popNote"></p>
 <div class="grid" id="clist"></div>
 </section>
 
@@ -259,6 +261,14 @@ dialog{background:var(--panel);color:var(--tx);border:1px solid var(--line);bord
 <div class="m" id="chkMsg" role="status"></div></section>
 <section class="panel" id="chkOut" hidden></section>
 </div>
+<div id="tool-power" class="view" hidden>
+<section class="panel"><h2>Power level calculator</h2><p class="m">Paste a Commander decklist and the cards are counted for you, or type the counts in yourself. The score runs from 1 to 10 and shows where each type of card sits against its usual range. Add your commander to get suggestions from your own collection.</p>
+<textarea id="pwText" style="height:150px" placeholder="1 Sol Ring&#10;1 Arcane Signet&#10;..." aria-label="Decklist"></textarea>
+<div class="chips"><input type="text" id="pwCmd" placeholder="Commander (optional)" aria-label="Commander" style="max-width:260px"><button id="pwImport">Import deck</button><button class="alt" id="pwClear">Clear</button></div>
+<div class="m" id="pwMsg" role="status"></div></section>
+<section class="panel"><h3>Card counts</h3><p class="m">Change any number to see the score update.</p><div class="pwgrid" id="pwGrid"></div></section>
+<section class="panel" id="pwRes"></section>
+</div>
 </main>
 <dialog id="saveDlg" aria-labelledby="svTitle"><h2 id="svTitle">Save deck</h2><label class="m" for="svName">Deck name</label><input type="text" id="svName"><label class="m" for="svFolder">Folder (type a new one or pick an existing one)</label><input type="text" id="svFolder" list="svFolders"><datalist id="svFolders"></datalist><p class="m">Saving with the same name in the same folder replaces the older copy.</p><div class="tools"><button id="svOk">Save</button><button class="alt" id="svCancel">Cancel</button></div></dialog>
 <div id="toast" class="toast" role="status" hidden></div>
@@ -342,11 +352,30 @@ const isCmdr=c=>c.l&&c.l!='not_legal'&&c.l!='banned'&&((/Legendary/.test(c.t.spl
 const rateCache=new Map();
 function rateOf(c){if(!rateCache.has(c.n))rateCache.set(c.n,cmdrRate(c));return rateCache.get(c.n)}
 const starStr=n=>'\u2605'.repeat(n)+'\u2606'.repeat(5-n);
+// How many decks each commander appears in on EDHREC (built from public Moxfield, Archidekt and other deck lists). Written weekly by a GitHub job.
+let popData=null,popTried=false;
+async function loadPop(){if(popTried)return;popTried=true;
+ try{const r=await fetch('data/commander-popularity.json',{cache:'no-store'});if(r.ok){const j=await r.json();popData=j.cards||null;if(popData&&!$('#tool-cmd').hidden)showCmds()}}catch(e){}}
+const popOf=c=>popData&&popData[c.n]?popData[c.n].decks:null;
+const fmtN=n=>n.toLocaleString('en-GB');
+// How much of what people usually play with this commander do you already own? Weighted by how often each card is played.
+let ownFront=null;
+function ownedSet(){if(ownFront)return ownFront;ownFront=new Set();lib.forEach(c=>{if((qty.get(c.n)||0)>0)c.n.split(' // ').forEach(x=>ownFront.add(x.toLowerCase()))});return ownFront}
+const fitCache=new Map();
+function fitOf(c){const d=popData&&popData[c.n];if(!d||!d.c||!d.c.length)return null;
+ if(fitCache.has(c.n))return fitCache.get(c.n);
+ const own=ownedSet();let tot=0,have=0,n=0;d.c.forEach(([nm,p])=>{tot+=p;if(own.has(nm.split(' // ')[0].toLowerCase())||own.has(nm.toLowerCase())){have+=p;n++}});
+ const r={pct:Math.round(100*have/tot),n,of:d.c.length};fitCache.set(c.n,r);return r}
 function showCmds(){
- const q=$('#csearch').value.toLowerCase();
- const l=lib.filter(c=>isCmdr(c)&&c.n.toLowerCase().includes(q)).sort((a,b)=>a.n.localeCompare(b.n));
- $('#clist').innerHTML=l.length?l.map(c=>{const r=rateOf(c);return `<button class="cmd" data-c="${enc(c.n)}"><img src="${c.img}" alt=""><span>${c.n}<br><span class="m">${c.ci.join('')||'Colourless'}${r.stars<=1?' · often better in the 99':''}</span></span></button>`}).join(''):'<p class="m">No legal commanders found in your collection.</p>';
+ loadPop();ownFront=null;fitCache.clear();
+ const q=$('#csearch').value.toLowerCase(),by=$('#csort').value;
+ const key=c=>by=='fit'?(fitOf(c)?fitOf(c).pct:-1):by=='pop'?(popOf(c)||0):0;
+ const l=lib.filter(c=>isCmdr(c)&&c.n.toLowerCase().includes(q)).sort((a,b)=>by!='az'&&popData?(key(b)-key(a)||(popOf(b)||0)-(popOf(a)||0)||a.n.localeCompare(b.n)):a.n.localeCompare(b.n));
+ $('#popNote').textContent=popData?'Deck counts and usual cards come from EDHREC, which gathers public deck lists from Moxfield, Archidekt and other sites. “You own” is the share of the cards people most often play with that commander that are in your collection, weighted by how often each is played.':'';
+ $('#clist').innerHTML=l.length?l.map(c=>{const pp=popOf(c),ft=fitOf(c);
+  return `<button class="cmd" data-c="${enc(c.n)}"><img src="${c.img}" alt=""><span>${c.n}<br><span class="m">${c.ci.join('')||'Colourless'}${pp!=null?' · '+(pp?fmtN(pp)+' decks':'no decks listed'):''}</span>${ft?`<br><span class="m"><b>You own ${ft.pct}%</b> of the usual cards (${ft.n} of ${ft.of})</span>`:''}</span></button>`}).join(''):'<p class="m">No legal commanders found in your collection.</p>';
 }
+$('#csort').onchange=showCmds;
 $('#clist').onclick=e=>{const b=e.target.closest('[data-c]');if(!b)return;
  cmd=lib.find(c=>c.n==decodeURIComponent(b.dataset.c));
  deck=new Map();basics={};ups=null;upsFailed=false;sc.clear();
@@ -405,7 +434,7 @@ function setFocus(){const txt=cmd.o.toLowerCase().split(/\n|\.\s/).filter(x=>!/\
  typeFocus=TYPEF.filter(x=>x.d.test(txt)).map(x=>({...x,cre:new RegExp('\\b'+x.n+' creatures?\\b').test(txt)}))}
 async function loadTypes(){if(types.length)return;try{const c=localStorage.getItem('mtg-types');if(c){types=JSON.parse(c);return}const r=await fetch('https://api.scryfall.com/catalog/creature-types');types=(await r.json()).data||[];localStorage.setItem('mtg-types',JSON.stringify(types))}catch(e){}}
 function tribeRe(t){const v=[t,t+'s',t+'es'];if(/f$/.test(t))v.push(t.replace(/f$/,'ves'));if(/fe$/.test(t))v.push(t.replace(/fe$/,'ves'));if(/y$/.test(t))v.push(t.replace(/y$/,'ies'));return new RegExp('\\b('+v.map(x=>x.replace(/[^a-z]/g,'.?')).join('|')+')\\b','i')}
-let tstr='strong',allTribes=[],granted=[];
+let tstr='strong',allTribes=[],granted=[],cmdPop=null;
 const TSTR={strong:1,moderate:.55,off:0};
 const reEsc=x=>x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 // Oracle text with reminder text removed and the card's own name replaced by ~ (so "Gishath, Sun's Avatar" doesn't read as an Avatar deck)
@@ -437,7 +466,9 @@ function readCmdr(){
  allTribes=detectTribes(cmd).map(x=>mkTribe(x.t,x.st));
  granted=grantedKw(txt);
  profiles=PROFILES.filter(p=>p.d.test(txt.toLowerCase())&&!granted.some(g=>g.p==p.n));
- setFocus();tstr=allTribes.length?'strong':'off';applyPlan();renderPlan()}
+ setFocus();tstr=allTribes.length?'strong':'off';
+ const pd=popData&&popData[cmd.n];cmdPop=pd&&pd.c&&pd.c.length?new Map(pd.c.map(([n,p])=>[n.split(' // ')[0].toLowerCase(),p])):null;
+ applyPlan();renderPlan()}
 const STOP=new Set('target,your,that,this,each,card,cards,when,whenever,with,from,have,until,control,controls,battlefield,creature,creatures,enters,player,players,their,then,they,them,into,more,does,pay,gets,without,time,turn,end,may,instead,other,only,also,would,least,number,long,graveyard,library,hand,owner,spell,spells,permanent,permanents,abilities,ability,mana,legendary,{t}'.split(','));
 function tribeHit(c){if(!tribes.length)return 0;const st=(c.t.split(' // ')[0].split('\u2014')[1]||'').toLowerCase();let s=0;
  const chg=/changeling/i.test(c.o)&&/Creature/.test(c.t);
@@ -454,7 +485,8 @@ function renderPlan(){
  const el=$('#plan');if(!el)return;
  const r=rateOf(cmd),chips=allTribes.map((x,i)=>`<button class="tchip ${x.st}" data-ti="${i}" aria-label="${x.t}: ${x.st=='p'?'main tribe':x.st=='s'?'secondary tribe':'off'}. Click to change." title="Click to cycle main / secondary / off">${x.t[0].toUpperCase()+x.t.slice(1)} \u00b7 ${x.st=='p'?'main':x.st=='s'?'side':'off'}</button>`).join('');
  el.innerHTML=`<h4>How the builder reads this commander</h4>
- ${r.stars<=1?`<div class="m"><b>Often better in the 99:</b> ${r.why.join('. ')}.</div>`:''}
+ ${popOf(cmd)!=null?`<div class="m"><b>${popOf(cmd)?fmtN(popOf(cmd))+' decks':'No decks'}</b> on EDHREC use this commander.</div>`:''}
+ ${(()=>{const f=fitOf(cmd);return f?`<div class="m"><b>You own ${f.pct}%</b> of the cards people most often play with this commander (${f.n} of ${f.of}). The builder prefers those cards.</div>`:''})()}
  <div class="chips" role="group" aria-label="Creature types to build around">${chips||'<span class="m">No creature type to build around was found in its text.</span>'}</div>
  <div class="m">Click a type to switch it between main tribe, secondary and off. ${allTribes.length?'':'You can still add one below.'}</div>
  <div class="chips"><input id="addT" list="typeList" placeholder="Add a creature type" aria-label="Add a creature type"><datalist id="typeList">${types.map(t=>`<option value="${t}">`).join('')}</datalist><button class="alt" id="addTb">Add</button>
@@ -518,6 +550,7 @@ function ev(c){
  const w=new Set((o+' '+c.t.toLowerCase()).match(/[a-z+\/\-]{4,}/g)||[]);let g=0;kws.forEach(k=>{if(w.has(k))g++});v+=Math.min(g,5)*.5;
  v+=c.er?Math.max(0,10-2.5*Math.log10(c.er))*.6:0;
  v-=Math.max(0,c.cmc-6)*.4;
+ if(cmdPop){const pc=cmdPop.get(c.n.split(' // ')[0].toLowerCase());if(pc){v+=Math.min(9,pc*.14);why.push('popular with this commander')}}
  if(granted.length&&/Creature/.test(c.t.split(' // ')[0])&&granted.some(g=>new RegExp('\\b'+g.k+'\\b').test(o.split('\n').slice(0,2).join(' ')) ))v-=2;
  const r={s:v,why};sc.set(c.n,r);return r}
 const score=c=>ev(c).s;
@@ -811,10 +844,10 @@ const hDatesN=()=>Object.keys(hist.d).length;
 function homeStatus(){const n=lib.length;$('#hneed').textContent=n?'':'Load your collection further down this page to unlock most of these tools. The 40-card draft builder and Saved decks work without it.';
  $('#hstat').innerHTML=n?`<b>${n} unique cards</b> in your saved collection${collT?` (loaded ${new Date(collT).toLocaleDateString()})`:''}. It stays in this browser, so you only need to import again when your collection changes.`+(hDatesN()?` Price history: ${hDatesN()} day${hDatesN()==1?'':'s'}.`:''):'No collection loaded yet. Import one above to unlock the Commander builder.';
  document.querySelectorAll('.tile[data-needs]').forEach(b=>b.disabled=!n)}
-function openTool(t){['home','cmd','draft','sixty','price','check','saved','stats','search'].forEach(k=>$(k=='home'?'#home':'#tool-'+k).hidden=k!=t);$('#homeBtn').hidden=t=='home';
+function openTool(t){['home','cmd','draft','sixty','price','check','saved','stats','search','power'].forEach(k=>$(k=='home'?'#home':'#tool-'+k).hidden=k!=t);$('#homeBtn').hidden=t=='home';
  if(t=='cmd'){$('#s2').hidden=false;showCmds()}
  if(t=='search')renderG();
- if(t=='draft')initDraft();if(t=='sixty')ssearch();if(t=='price')renderPrice();if(t=='saved')renderSaved();if(t=='stats')renderStats();scrollTo(0,0)}
+ if(t=='power')pwInit();if(t=='draft')initDraft();if(t=='sixty')ssearch();if(t=='price')renderPrice();if(t=='saved')renderSaved();if(t=='stats')renderStats();scrollTo(0,0)}
 
 // ---------- 40-card draft builder ----------
 let dpool=new Map(),dres=[],dout=null;
@@ -1207,57 +1240,62 @@ function healthChecks(d){
   add(src[x]==0?'bad':src[x]<need?'warn':'ok',`${nm}: ${src[x]} land${src[x]==1?'':'s'} make it, for ${Math.round(pips[x])} coloured symbols (rule of thumb: about ${need}).`)});
  return{R,total,nn,lands,avg}}
 // ---------- deck power level (1-10) ----------
-// Counts the things that make a Commander deck faster, more consistent and harder to stop, then scales to 1-10. A guide, not a verdict:
-// it cannot see two-card combos or how well the cards work together.
-const PW_FASTM=new Set(['Sol Ring','Mana Crypt','Mana Vault','Chrome Mox','Mox Diamond','Mox Opal','Jeweled Lotus','Lotus Petal','Grim Monolith','Ancient Tomb','Dark Ritual','Cabal Ritual','Mox Amber','Mox Tantalite','Mox Pearl','Mox Sapphire','Mox Jet','Mox Ruby','Mox Emerald','Basalt Monolith','Arcane Signet','Fellwar Stone','Mind Stone','Thought Vessel','Signets','Talisman']);
-function powerLevel(ents,cmds,gc){
- const all=[...ents,...cmds.map(c=>({c,n:1}))],cn=f=>all.reduce((a,e)=>a+(f(e.c)?e.n:0),0),nl=e=>!isLandC(e);
- const low=c=>(c.o||'').toLowerCase(),nonLand=all.filter(e=>!isLandC(e.c)),nn=nonLand.reduce((a,e)=>a+e.n,0)||1;
- const lands=cn(isLandC);
- const ramp=cn(c=>!isLandC(c)&&cat(c)=='Ramp'),draw=cn(c=>!isLandC(c)&&cat(c)=='Draw'),removal=cn(c=>!isLandC(c)&&cat(c)=='Removal'),wipes=cn(c=>cat(c)=='Wipe');
- const tut=cn(c=>!isLandC(c)&&/search your library for (a|an|up to \w+) /.test(low(c))&&!/\bland\b|basic|plains|island|swamp|mountain|forest/.test((low(c).match(/search your library for [^.]*/)||[''])[0]));
- const counters=cn(c=>/counter target (spell|noncreature|creature spell|activated|instant)/.test(low(c)));
- const tokens=cn(c=>/create [^.]{0,60}tokens?/.test(low(c)));
- const stax=cn(c=>/can't (cast|attack|activate|search|draw)|each (player|opponent) sacrifices|spells (your opponents|opponents|each opponent) cast cost|don't untap|doesn't untap|players can't/.test(low(c)));
- const lords=cn(c=>/other [a-z]+s? you control get \+|creatures you control get \+/.test(low(c)));
- const combo=cn(c=>/extra turn|win the game|each opponent loses|infinite|untap (all|target) (permanent|land|creature)s?|copy (target|each|that) (spell|permanent)|you may cast [^.]*without paying|whenever you cast [^.]*copy/.test(low(c)));
- const fast=cn(c=>PW_FASTM.has(c.n)||(!isLandC(c)&&c.cmc<=2&&/\badd \{/.test(low(c))&&/Artifact|Instant|Sorcery/.test(c.t)));
- const rare=cn(c=>c.r&&c.r!='common'&&!isLandC(c));
- const gcs=gc?all.filter(e=>gc.has(e.c.n)):[],gn=gcs.reduce((a,e)=>a+e.n,0);
- const avg=nonLand.reduce((a,e)=>a+e.c.cmc*e.n,0)/nn;
- const P=[];let sc=2;
- const add=(label,v,max)=>{v=Math.max(-1,Math.min(max,v));sc+=v;P.push({label,v:Math.round(v*10)/10,max})};
- add('Game Changers',gn*.5,3);
- add('Tutors',tut*.3,1.5);
- add('Fast mana',fast*.3,1.2);
- add('Mana efficiency',(3.6-avg)*1.1,1.5);
- add('Consistency (ramp and draw)',(Math.min(ramp,12)/12+Math.min(draw,10)/10)*.6,1.2);
- add('Interaction',(removal+counters+wipes*.5)/10,1);
- add('Win and combo pieces',combo*.4,1.5);
- if(lands&&(lands<31||lands>40))add('Land count',-.5,0);
+// Same idea as the Cardsrealm calculator: count the kinds of card in a Commander deck, compare each to a usual range, and scale to 1-10.
+// The weights are my own (that site doesn't publish its formula). It can't see combos or how well the cards fit together.
+const PW_FASTM=new Set(['Sol Ring','Mana Crypt','Mana Vault','Chrome Mox','Mox Diamond','Mox Opal','Jeweled Lotus','Lotus Petal','Grim Monolith','Dark Ritual','Cabal Ritual','Mox Amber','Basalt Monolith']);
+const lowO=c=>(c.o||'').toLowerCase();
+const PW=[
+ {k:'ramp',n:'Ramp',lo:12,hi:23,f:c=>!isLandC(c)&&cat(c)=='Ramp'},
+ {k:'draw',n:'Card draw',lo:12,hi:20,f:c=>!isLandC(c)&&cat(c)=='Draw'},
+ {k:'tutors',n:'Tutors',lo:5,hi:10,f:c=>!isLandC(c)&&/search your library for (a|an|up to \w+) /.test(lowO(c))&&!/\bland\b|basic|plains|island|swamp|mountain|forest/.test((lowO(c).match(/search your library for [^.]*/)||[''])[0])},
+ {k:'rare',n:'Non-common cards',lo:75,hi:100,f:c=>c.r&&c.r!='common'},
+ {k:'tokens',n:'Token generators',lo:0,hi:15,f:c=>/create [^.]{0,60}tokens?/.test(lowO(c))},
+ {k:'stax',n:'Stax',lo:0,hi:15,f:c=>/can't (cast|attack|activate|search|draw)|each (player|opponent) sacrifices|spells (your opponents|opponents|each opponent) cast cost|don't untap|doesn't untap|players can't/.test(lowO(c))},
+ {k:'lords',n:'Lords',lo:0,hi:15,f:c=>/other [a-z]+s? you control get \+|creatures you control get \+/.test(lowO(c))},
+ {k:'combo',n:'Combo-potential cards',lo:5,hi:15,f:c=>/extra turn|win the game|each opponent loses|infinite|untap (all|target) (permanent|land|creature)s?|copy (target|each|that) (spell|permanent)|you may cast [^.]*without paying|whenever you cast [^.]*copy/.test(lowO(c))},
+ {k:'removal',n:'Removal',lo:5,hi:15,f:c=>!isLandC(c)&&cat(c)=='Removal'},
+ {k:'counters',n:'Counterspells',lo:0,hi:10,f:c=>/counter target (spell|noncreature|creature spell|activated|instant)/.test(lowO(c))}];
+const PW_FAST=c=>PW_FASTM.has(c.n)||(!isLandC(c)&&c.cmc<=2&&/\badd \{/.test(lowO(c))&&/Artifact|Instant|Sorcery/.test(c.t));
+function powerCounts(ents,cmds,gc){
+ const all=[...ents,...cmds.map(c=>({c,n:1}))],cn=f=>all.reduce((a,e)=>a+(f(e.c)?e.n:0),0);
+ const cnt={};PW.forEach(p=>cnt[p.k]=cn(p.f));
+ cnt.cards=cn(()=>true);cnt.mv=Math.round(all.reduce((a,e)=>a+(isLandC(e.c)?0:e.c.cmc*e.n),0));
+ cnt.nonland=cn(c=>!isLandC(c));cnt.fast=cn(PW_FAST);cnt.wipes=cn(c=>cat(c)=='Wipe');
+ const gcs=gc?all.filter(e=>gc.has(e.c.n)):[];cnt.gn=gc?gcs.reduce((a,e)=>a+e.n,0):null;cnt.gcs=gcs;
+ return cnt}
+function powerFromCounts(c){
+ const avg=c.nonland?c.mv/c.nonland:(c.cards?c.mv/c.cards:0),P=[];let sc=1;
+ const add=(label,v,max)=>{v=Math.max(-1,Math.min(max,v));sc+=v;P.push({label,v:Math.round(v*10)/10})};
+ add('Ramp',c.ramp/12,1.2);add('Card draw',c.draw/12,1.2);add('Tutors',c.tutors*.2,2);
+ add('Combo-potential cards',c.combo*.14,2);add('Removal',c.removal/8,1);add('Counterspells',c.counters*.1,.8);
+ add('Stax',c.stax*.1,.5);add('Lords and token makers',(c.lords+c.tokens)*.05,.6);add('Non-common cards',c.rare/200,.5);
+ add('Cheap fast mana',(c.fast||0)*.25,1.2);
+ if(c.gn!=null)add('Game Changers',c.gn*.4,2);
+ if(avg)add('Mana efficiency',(3.8-avg)*1.1,1.5);
  const score=Math.max(1,Math.min(10,Math.round(sc*2)/2));
- const band=score>=9?'cEDH territory: very efficient, hard to stop':score>=7?'Optimised: a focused plan and a good mana base':score>=5?'Upgraded precon or a deck with a clear plan':score>=3?'Precon level: basic strategy':'Casual pile: limited power';
- const rows=[['Ramp',ramp,'10 to 15'],['Card draw',draw,'10 or more'],['Removal',removal,'5 to 10'],['Tutors',tut,'0 to 10'],['Counterspells',counters,'0 to 10'],['Token makers',tokens,'0 to 15'],['Lords',lords,'0 to 15'],['Stax pieces',stax,'0 to 15'],['Combo-type pieces',combo,'0 to 15'],['Non-common cards',rare,'75 or more']];
+ const rows=PW.map(p=>{const v=c[p.k];return{k:p.k,n:p.n,v,lo:p.lo,hi:p.hi,st:v<p.lo?'below':v>p.hi?'above':'within'}});
  const tips=[];
- if(ramp<10)tips.push(`Add ramp: ${ramp} found, 10 or more keeps the deck from stalling.`);
- if(draw<10)tips.push(`Add card draw: ${draw} found, 10 or more keeps your hand full.`);
- if(removal<5)tips.push(`Add removal: ${removal} found, you want at least 5.`);
- if(avg>3.6)tips.push(`Lower the curve: average mana value is ${avg.toFixed(1)}.`);
- if(!tut&&score<8)tips.push('A few tutors (cards that fetch a specific card) make the deck more consistent.');
- return{score,band,rows,P,avg,gn,gcs,tips,hasGC:!!gc}}
+ rows.forEach(r=>{if(r.st=='below'&&r.k!='rare'){const m=r.lo-r.v;tips.push({k:r.k,t:`Add ${m} more ${r.n.toLowerCase()} card${m==1?'':'s'} (${r.v} now, ${r.lo} to ${r.hi} is usual).`})}});
+ if(avg>3.8)tips.push({k:'avg',t:`Lower the curve: the average mana value is ${avg.toFixed(1)}.`});
+ return{score,P,rows,tips,avg,gn:c.gn,gcs:c.gcs||[],hasGC:c.gn!=null,cards:c.cards,mv:c.mv}}
+function powerLevel(ents,cmds,gc){return powerFromCounts(powerCounts(ents,cmds,gc))}
+const PW_BANDS=[[1,2,'Random piles of cards, limited power, or decks that only work with the commander out'],[3,4,'Precons with a basic strategy'],[5,6,'An upgraded precon, or a deck with a clear plan'],[7,8,'A specific, consistent plan with a near-perfect mana base'],[9,10,'cEDH: highly efficient, almost card for card consistent']];
 function powerHtml(r,title){
- return`<div class="brk"><b>${title||'Power level'}: ${r.score} / 10</b> <span class="m">${r.band}</span>
- <div class="m">${r.hasGC?`Game Changers: ${r.gn}${r.gn?` (${r.gcs.map(e=>e.c.n).slice(0,5).join(', ')}${r.gcs.length>5?'…':''})`:''}.`:'The Game Changers list could not be loaded, so that part is not counted.'} Average mana value ${r.avg.toFixed(1)}.</div>
- <details><summary class="m">What counted</summary><div class="m">${r.P.map(p=>`${p.label}: ${p.v>=0?'+':''}${p.v}`).join(' · ')}</div>
- <table class="pwt"><tr><th scope="col">Cards of type</th><th scope="col">In deck</th><th scope="col">Usual range</th></tr>${r.rows.map(([n,v,g])=>`<tr><td>${n}</td><td>${v}</td><td>${g}</td></tr>`).join('')}</table></details>
- ${r.tips.length?`<ul class="chk">${r.tips.map(t=>`<li><span>${esc(t)}</span></li>`).join('')}</ul>`:''}
+ const band=PW_BANDS.find(b=>r.score>=b[0]&&r.score<=b[1]+.5)||PW_BANDS[0];
+ const stl={below:'below the usual range',within:'in range',above:'above the usual range'};
+ return`<div class="brk"><b>${title||'Power level'}: ${r.score} / 10</b> <span class="m">${band[2]}</span>
+ <div class="m">${r.cards} cards, total mana value ${r.mv}, average ${r.avg.toFixed(1)}. ${r.hasGC?`Game Changers: ${r.gn}${r.gcs.length?` (${r.gcs.map(e=>e.c.n).slice(0,5).join(', ')}${r.gcs.length>5?'…':''})`:''}.`:'Game Changers not counted.'}</div>
+ <table class="pwt"><tr><th scope="col">Cards</th><th scope="col">In deck</th><th scope="col">Usual range</th><th scope="col"></th></tr>${r.rows.map(x=>`<tr><td>${x.n}</td><td>${x.v}</td><td>${x.lo} to ${x.hi}</td><td class="${x.st=='within'?'good':x.st=='below'&&x.lo?'part':'m'}">${stl[x.st]}</td></tr>`).join('')}</table>
+ <table class="pwt"><tr><th scope="col">Score</th><th scope="col">What it usually means</th></tr>${PW_BANDS.map(b=>`<tr${b===band?' class="cur"':''}><td>${b[0]} to ${b[1]}</td><td>${b[2]}</td></tr>`).join('')}</table>
+ <details><summary class="m">How the score adds up</summary><div class="m">Starts at 1. ${r.P.map(p=>`${p.label} ${p.v>=0?'+':''}${p.v}`).join(' · ')}.</div></details>
+ ${r.tips.length?`<h4>To increase power</h4><ul class="chk">${r.tips.map(t=>`<li><span>${esc(t.t)}</span></li>`).join('')}</ul>`:''}
  <div class="m">A guide only. It counts card types and can't see two-card combos or how well the cards work together, so talk to your table about power before a game.</div></div>`}
 let pwTok=0;
 async function pwrUpdate(){const el=$('#pwr'),t=++pwTok;if(!el||!cmd||!deck.size){if(el)el.innerHTML='';return}
  const gc=await loadGC().catch(()=>null);if(t!=pwTok)return;
  const ents=[...deck.values()].map(c=>({c,n:1}));
  const bt=Object.values(basics).reduce((a,b)=>a+b,0);
- const r=powerLevel(ents,[cmd],gc);
+ const cc=powerCounts(ents,[cmd],gc);cc.cards+=bt;const r=powerFromCounts(cc);
  el.innerHTML=powerHtml(r,'Deck power level')+(bt?'':'')}
 function bracketInfo(d){
  if(d.fmt!='commander')return'';
@@ -1375,6 +1413,40 @@ function applyTweaks(){
 function undoTweaks(){if(!chkUndo)return;$('#chkText').value=chkUndo.text;$('#chkFmt').value=chkUndo.fmt;$('#chkCmd').value=chkUndo.cmd;chkUndo=null;chkPlan=null;runCheck()}
 function chkLoad(text,fmt,cmdName,id){chkUndo=null;chkPlan=null;chkId=id||null;chkSaveLabel();$('#chkText').value=text;$('#chkFmt').value=fmt||'auto';$('#chkCmd').value=cmdName||'';openTool('check');runCheck()}
 $('#chkGo').onclick=runCheck;
+// ---------- power level calculator tool ----------
+const PWF=[...PW.map(p=>({k:p.k,n:p.n,h:`usual ${p.lo} to ${p.hi}`})),{k:'cards',n:'Cards counted',h:'100 in Commander'},{k:'mv',n:'Total mana value (no lands)',h:'adds up the cards’ costs'},{k:'gn',n:'Game Changers',h:'0 for brackets 1 and 2'},{k:'fast',n:'Cheap fast mana',h:'Sol Ring, moxen, rituals'}];
+let pwCI=null,pwNames=new Set(),pwGcs=[],pwBusy=false,pwNL=null;
+function pwInit(){const g=$('#pwGrid');if(!g.children.length){g.innerHTML=PWF.map(f=>`<label>${f.n}<input type="number" min="0" inputmode="numeric" data-pk="${f.k}" value="${f.k=='cards'?100:0}"><span class="m">${f.h}</span></label>`).join('');pwShow()}}
+function pwRead(){const c={};PWF.forEach(f=>{c[f.k]=Math.max(0,+(g_(f.k).value)||0)});c.nonland=pwNL&&pwNL.cards==c.cards?pwNL.n:Math.max(0,c.cards-36);c.gcs=pwGcs;return c}
+const g_=k=>$('#pwGrid').querySelector(`[data-pk=${k}]`);
+function pwSugg(r){
+ if(!lib.length)return'<div class="m">Load your collection to get suggestions from the cards you own.</div>';
+ if(!pwCI)return'<div class="m">Enter a commander to get suggestions from your own collection.</div>';
+ const out=r.tips.filter(t=>PW.some(p=>p.k==t.k)).slice(0,4).map(t=>{const p=PW.find(x=>x.k==t.k);
+  const l=lib.filter(c=>!pwNames.has(c.n)&&!/Basic/.test(c.t)&&(c.l=='legal'||c.l=='restricted')&&c.ci.every(x=>pwCI.includes(x))&&p.f(c)).sort((a,b)=>(a.er||1e9)-(b.er||1e9)).slice(0,5);
+  return l.length?`<li><span><b>${p.n}:</b> ${l.map(c=>esc(c.n)).join(', ')}</span></li>`:''}).join('');
+ return out?`<h4>From your collection</h4><ul class="chk">${out}</ul>`:'<div class="m">Nothing in your collection would fill the gaps in your commander’s colours.</div>'}
+function pwShow(){const r=powerFromCounts(pwRead());$('#pwRes').innerHTML=powerHtml(r,'Power level')+pwSugg(r)}
+$('#pwGrid').addEventListener('input',pwShow);
+$('#pwClear').onclick=()=>{$('#pwText').value='';$('#pwCmd').value='';pwCI=null;pwNames=new Set();pwGcs=[];pwNL=null;PWF.forEach(f=>g_(f.k).value=f.k=='cards'?100:0);$('#pwMsg').textContent='';pwShow()};
+async function pwCommanderCI(name){if(!name){pwCI=null;return}
+ const l=lib.find(c=>c.n.toLowerCase()==name.toLowerCase());if(l){pwCI=l.ci;return}
+ try{const {out}=await chkLookup([name]);const c=[...out.values()][0];pwCI=c?c.ci:null}catch(e){pwCI=null}}
+$('#pwCmd').addEventListener('change',async()=>{await pwCommanderCI($('#pwCmd').value.trim());pwShow()});
+$('#pwImport').onclick=async()=>{
+ if(pwBusy)return;const st=$('#pwMsg'),p=parseDeck($('#pwText').value),cn=$('#pwCmd').value.trim();
+ if(cn&&!p.cmd.some(x=>x.toLowerCase()==cn.toLowerCase())){p.cmd.push(cn);const k=[...p.main.keys()].find(x=>x.toLowerCase()==cn.toLowerCase());if(k){const v=p.main.get(k)-1;v>0?p.main.set(k,v):p.main.delete(k)}}
+ const tot=[...p.main.values()].reduce((a,b)=>a+b,0)+p.cmd.length;if(!tot){st.textContent='Paste a decklist first.';return}
+ pwBusy=true;st.textContent='Looking up cards…';
+ try{const names=[...new Set([...p.main.keys(),...p.cmd])],{out,miss}=await chkLookup(names);
+  const ents=[...p.main].map(([n,k])=>({c:out.get(n),n:k})).filter(e=>e.c),cmds=p.cmd.map(n=>out.get(n)).filter(Boolean);
+  st.textContent='Checking the Game Changers list…';const gc=await loadGC();
+  const c=powerCounts(ents,cmds,gc);pwGcs=c.gcs;pwNL={cards:c.cards,n:c.nonland};pwNames=new Set(ents.map(e=>e.c.n));
+  PWF.forEach(f=>{const v=c[f.k];g_(f.k).value=v==null?0:v});
+  if(cmds.length){pwCI=[...new Set(cmds.flatMap(x=>x.ci))];if(!cn)$('#pwCmd').value=cmds[0].n}else if(cn)await pwCommanderCI(cn);
+  st.textContent=(miss.length?`${miss.length} name${miss.length==1?'':'s'} not recognised: ${miss.slice(0,5).join(', ')}${miss.length>5?'…':''}. `:'')+(gc?'':'Could not load the Game Changers list, so those are not counted. ');
+  pwShow()}catch(e){st.textContent='Could not reach Scryfall. Check your connection and try again.'}finally{pwBusy=false}};
+
 $('#chkClear').onclick=()=>{chkUndo=null;chkPlan=null;chkId=null;chkSaveLabel();$('#chkText').value='';$('#chkCmd').value='';chkData=null;$('#chkOut').hidden=true;$('#chkMsg').textContent=''};
 $('#chkMiss').onchange=renderCheck;
 $('#chkOut').addEventListener('click',e=>{const dd=e.target.dataset||{};
