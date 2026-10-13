@@ -61,6 +61,7 @@ label.row input{margin-right:6px}
 .cW{background:#f4efd2;color:#3a3420}.cU{background:#5aa0d9;color:#08233a}.cB{background:#4a4248;color:#eee}.cR{background:#d96a52;color:#3a0f08}.cG{background:#4f9c62;color:#06260f}.cC{background:#b9b9b9;color:#222}
 .chip.wide{width:auto;border-radius:8px;padding:0 12px;background:transparent;color:var(--tx);border:1px solid var(--line);opacity:1;font-weight:600}
 .chip.wide[aria-pressed=true]{background:var(--gold);color:#201a08;border-color:var(--gold)}
+.csrow{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.csrow input{flex:1;min-width:180px}.csrow select{background:#0f1815;color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:6px}
 .plan{margin:8px 0;padding:10px;border:1px solid var(--line);border-radius:8px;font-size:14px}
 .plan h4{margin:0 0 6px}.plan .chips{margin:6px 0}
 .tchip{border-radius:16px;padding:5px 12px;background:transparent;color:var(--tx);border:1px solid var(--line);font-weight:600}
@@ -154,7 +155,7 @@ dialog{background:var(--panel);color:var(--tx);border:1px solid var(--line);bord
 
 <section class="panel" id="s2" hidden>
 <h2>Choose a commander</h2>
-<div class="fbar"><input type="search" id="csearch" placeholder="Search your legendary creatures" aria-label="Search commanders"><select id="csort" aria-label="Sort commanders"><option value="best">Best commanders first</option><option value="az">A–Z</option></select></div><p class="m">Stars show how well a card works as a commander (a lasting ability, a clear theme to build around) rather than how strong it is in general. Cards that only do something when they enter are usually better in the 99.</p>
+<div class="csrow"><input type="search" id="csearch" placeholder="Search your legendary creatures" aria-label="Search commanders"><select id="csort" aria-label="Sort commanders"><option value="best">Best commanders first</option><option value="az">A–Z</option></select></div><p class="m">Stars show how well a card works as a commander (a lasting ability, a clear theme to build around) rather than how strong it is in general. Cards that only do something when they enter are usually better in the 99.</p>
 <div class="grid" id="clist"></div>
 </section>
 
