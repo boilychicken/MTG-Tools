@@ -61,6 +61,14 @@ label.row input{margin-right:6px}
 .cW{background:#f4efd2;color:#3a3420}.cU{background:#5aa0d9;color:#08233a}.cB{background:#4a4248;color:#eee}.cR{background:#d96a52;color:#3a0f08}.cG{background:#4f9c62;color:#06260f}.cC{background:#b9b9b9;color:#222}
 .chip.wide{width:auto;border-radius:8px;padding:0 12px;background:transparent;color:var(--tx);border:1px solid var(--line);opacity:1;font-weight:600}
 .chip.wide[aria-pressed=true]{background:var(--gold);color:#201a08;border-color:var(--gold)}
+.plan{margin:8px 0;padding:10px;border:1px solid var(--line);border-radius:8px;font-size:14px}
+.plan h4{margin:0 0 6px}.plan .chips{margin:6px 0}
+.tchip{border-radius:16px;padding:5px 12px;background:transparent;color:var(--tx);border:1px solid var(--line);font-weight:600}
+.tchip.p{background:var(--gold);color:#201a08;border-color:var(--gold)}
+.tchip.s{border-color:var(--gold);color:var(--gold)}
+.tchip.o{opacity:.55;text-decoration:line-through}
+.stars{color:var(--gold);letter-spacing:1px}
+.plan input,.plan select{background:#0f1815;color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
 .view{display:grid;gap:16px}
 .tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
 .tile{text-align:left;background:#0f1815;color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:14px;font-weight:600;line-height:1.4}
@@ -146,7 +154,7 @@ dialog{background:var(--panel);color:var(--tx);border:1px solid var(--line);bord
 
 <section class="panel" id="s2" hidden>
 <h2>Choose a commander</h2>
-<input type="search" id="csearch" placeholder="Search your legendary creatures" aria-label="Search commanders">
+<div class="fbar"><input type="search" id="csearch" placeholder="Search your legendary creatures" aria-label="Search commanders"><select id="csort" aria-label="Sort commanders"><option value="best">Best commanders first</option><option value="az">A–Z</option></select></div><p class="m">Stars show how well a card works as a commander (a lasting ability, a clear theme to build around) rather than how strong it is in general. Cards that only do something when they enter are usually better in the 99.</p>
 <div class="grid" id="clist"></div>
 </section>
 
@@ -154,6 +162,7 @@ dialog{background:var(--panel);color:var(--tx);border:1px solid var(--line);bord
 <div class="panel">
 <h2 id="dtitle"></h2>
 <div class="m" id="dsub"></div>
+<div id="plan" class="plan"></div>
 <div class="m" id="dstat"></div>
 <div class="tools"><button id="auto">Auto-build deck</button><button class="alt" id="copy">Copy list</button><button class="alt" id="tochk">Check this deck</button><button class="alt" id="tosave">Save deck</button><button class="alt" id="dl">Download .txt</button><button class="alt" id="back">Change commander</button></div>
 <div id="warn" class="bad m"></div>
@@ -274,8 +283,8 @@ function importText(t){
  const h=(rows[0]||[]).map(x=>x.trim().toLowerCase());
  const ni=h.findIndex(x=>['name','card name','card'].includes(x));
  if(ni>=0){
-  const qi=h.findIndex(x=>['count','quantity','qty','amount'].includes(x)),ii=h.findIndex(x=>x=='scryfall id'||x=='scryfall_id'),si0=h.findIndex(x=>['set name','edition name'].includes(x)),si=si0>=0?si0:h.findIndex(x=>['set code','edition','set'].includes(x)),ri=h.findIndex(x=>x=='rarity'),fi=h.findIndex(x=>x=='foil');
-  rows.slice(1).forEach(r=>{const n=(r[ni]||'').trim();if(n){m.set(n,(m.get(n)||0)+(qi>=0?parseInt(r[qi])||1:1));if(ii>=0&&/^[0-9a-f-]{36}$/i.test((r[ii]||'').trim())&&!ids.has(n))ids.set(n,r[ii].trim());addMeta(n,r[si],r[ri],ii>=0&&/^[0-9a-f-]{36}$/i.test((r[ii]||'').trim())?r[ii].trim().toLowerCase():'');if(fi>=0&&/foil|etched/i.test(r[fi]||'')&&!/^(normal|false|no)$/i.test((r[fi]||'').trim()))foilQ.set(n,(foilQ.get(n)||0)+(qi>=0?parseInt(r[qi])||1:1))}});
+  const qi=h.findIndex(x=>['count','quantity','qty','amount'].includes(x)),ii=h.findIndex(x=>x=='scryfall id'||x=='scryfall_id'),si0=h.findIndex(x=>['set name','edition name'].includes(x)),si=si0>=0?si0:h.findIndex(x=>['set code','edition','set'].includes(x)),ri=h.findIndex(x=>x=='rarity'),fi=h.findIndex(x=>x=='foil'),cni=h.findIndex(x=>x=='collector number'||x=='collector_number'||x=='number');
+  rows.slice(1).forEach(r=>{const n=(r[ni]||'').trim();if(n){m.set(n,(m.get(n)||0)+(qi>=0?parseInt(r[qi])||1:1));if(ii>=0&&/^[0-9a-f-]{36}$/i.test((r[ii]||'').trim())&&!ids.has(n))ids.set(n,r[ii].trim());addMeta(n,r[si],r[ri],ii>=0&&/^[0-9a-f-]{36}$/i.test((r[ii]||'').trim())?r[ii].trim().toLowerCase():'',cni>=0?(r[cni]||'').trim():'');if(fi>=0&&/foil|etched/i.test(r[fi]||'')&&!/^(normal|false|no)$/i.test((r[fi]||'').trim()))foilQ.set(n,(foilQ.get(n)||0)+(qi>=0?parseInt(r[qi])||1:1))}});
  }else t.split(/\r?\n/).forEach(l=>{
   const x=l.trim().match(/^(?:(\d+)x?\s+)?(.+?)(\s+\(\w+\).*)?$/);
   if(x&&x[2]&&!x[2].startsWith('//'))m.set(x[2].trim(),(m.get(x[2].trim())||0)+(+x[1]||1));
@@ -286,7 +295,7 @@ function slim(c){const f=c.card_faces||[];
  return{n:c.name,ci:c.color_identity||[],cmc:c.cmc||0,t:c.type_line||'',
   o:c.oracle_text??f.map(x=>x.oracle_text||'').join('\n//\n'),
   mc:c.mana_cost||(f[0]&&f[0].mana_cost)||'',l:(c.legalities||{}).commander,fm:['standard','pioneer','modern','legacy'].map(f=>(c.legalities||{})[f]=='legal'?f[0]:'').join(''),
-  img:((c.image_uris||(f[0]||{}).image_uris)||{}).small||'',img2:c.image_uris?'':(((f[1]||{}).image_uris)||{}).small||'',p:(c.prices||{}).eur||(c.prices||{}).eur_foil||null,er:c.edhrec_rank||0,pw:c.power??(f[0]||{}).power??'',tg:c.toughness??(f[0]||{}).toughness??'',sn:c.set_name||'',r:c.rarity||'',cm:(c.purchase_uris||{}).cardmarket||''}}
+  img:((c.image_uris||(f[0]||{}).image_uris)||{}).small||'',img2:c.image_uris?'':(((f[1]||{}).image_uris)||{}).small||'',p:(c.prices||{}).eur||(c.prices||{}).eur_foil||null,er:c.edhrec_rank||0,pw:c.power??(f[0]||{}).power??'',tg:c.toughness??(f[0]||{}).toughness??'',sn:c.set_name||'',cn:c.collector_number||'',r:c.rarity||'',cm:(c.purchase_uris||{}).cardmarket||''}}
 async function post(identifiers){
  for(let a=0;a<4;a++){
   try{const r=await fetch('https://api.scryfall.com/cards/collection',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({identifiers})});
@@ -316,7 +325,7 @@ async function load(){
   save()}
  const seen=new Set();lib=[];const miss=[];
  names.forEach(n=>{const c=cards[n.toLowerCase()];if(c===undefined)return;if(!c){miss.push(n);return}if(!seen.has(c.n)){seen.add(c.n);lib.push(c)}});
- ownSet=new Set(lib.map(c=>c.n));qty=new Map();foilN=new Map();meta=new Map();names.forEach(n=>{const c=cards[n.toLowerCase()];if(!c)return;qty.set(c.n,(qty.get(c.n)||0)+m.get(n));if(foilQ.get(n))foilN.set(c.n,(foilN.get(c.n)||0)+foilQ.get(n));const raw=metaRaw.get(n),o=meta.get(c.n)||{sets:new Set(),rars:new Set(),pr:new Map()};if(raw){raw.sets.forEach(x=>o.sets.add(x));raw.rars.forEach(x=>o.rars.add(x));if(raw.pr)raw.pr.forEach((v,k)=>{if(!o.pr.has(k))o.pr.set(k,v)})}meta.set(c.n,o)});
+ ownSet=new Set(lib.map(c=>c.n));qty=new Map();foilN=new Map();meta=new Map();names.forEach(n=>{const c=cards[n.toLowerCase()];if(!c)return;qty.set(c.n,(qty.get(c.n)||0)+m.get(n));if(foilQ.get(n))foilN.set(c.n,(foilN.get(c.n)||0)+foilQ.get(n));const raw=metaRaw.get(n),o=meta.get(c.n)||{sets:new Set(),rars:new Set(),pr:new Map(),cn:new Map()};if(raw){if(raw.cn)raw.cn.forEach((v,k)=>{if(!o.cn.has(k))o.cn.set(k,v)});raw.sets.forEach(x=>o.sets.add(x));raw.rars.forEach(x=>o.rars.add(x));if(raw.pr)raw.pr.forEach((v,k)=>{if(!o.pr.has(k))o.pr.set(k,v)})}meta.set(c.n,o)});
  RB.cp[1]=Math.min(12,Math.max(1,...qty.values()));flt.r.cp=[1,RB.cp[1]];fillOpts();syncBars();
  msg((lib.length?`Loaded ${lib.length} unique cards.`:'No cards could be loaded.')
   +(failed?` Scryfall didn't respond for ${failed} cards, so they're missing for now. Click Load collection again to retry just those.`:'')
@@ -327,17 +336,19 @@ async function load(){
 
 // ---------- commander picker ----------
 const isCmdr=c=>c.l&&c.l!='not_legal'&&c.l!='banned'&&((/Legendary/.test(c.t.split(' // ')[0])&&/Creature/.test(c.t.split(' // ')[0]))||/can be your commander/i.test(c.o));
+const rateCache=new Map();
+function rateOf(c){if(!rateCache.has(c.n))rateCache.set(c.n,cmdrRate(c));return rateCache.get(c.n)}
+const starStr=n=>'\u2605'.repeat(n)+'\u2606'.repeat(5-n);
 function showCmds(){
- const q=$('#csearch').value.toLowerCase();
- const l=lib.filter(c=>isCmdr(c)&&c.n.toLowerCase().includes(q)).sort((a,b)=>a.n.localeCompare(b.n));
- $('#clist').innerHTML=l.length?l.map(c=>`<button class="cmd" data-c="${enc(c.n)}"><img src="${c.img}" alt=""><span>${c.n}<br><span class="m">${c.ci.join('')||'Colourless'}</span></span></button>`).join(''):'<p class="m">No legal commanders found in your collection.</p>';
+ const q=$('#csearch').value.toLowerCase(),by=$('#csort').value;
+ const l=lib.filter(c=>isCmdr(c)&&c.n.toLowerCase().includes(q)).sort((a,b)=>by=='best'?(rateOf(b).stars-rateOf(a).stars||rateOf(b).pts-rateOf(a).pts||a.n.localeCompare(b.n)):a.n.localeCompare(b.n));
+ $('#clist').innerHTML=l.length?l.map(c=>{const r=rateOf(c);return `<button class="cmd" data-c="${enc(c.n)}" title="${r.why.join('. ').replace(/"/g,'&quot;')}"><img src="${c.img}" alt=""><span>${c.n}<br><span class="m">${c.ci.join('')||'Colourless'}</span><br><span class="stars" aria-label="${r.stars} out of 5 stars">${starStr(r.stars)}</span> <span class="m">${r.label}</span></span></button>`}).join(''):'<p class="m">No legal commanders found in your collection.</p>';
 }
+$('#csort').onchange=showCmds;
 $('#clist').onclick=e=>{const b=e.target.closest('[data-c]');if(!b)return;
  cmd=lib.find(c=>c.n==decodeURIComponent(b.dataset.c));
- const stop=new Set('target,your,that,this,each,card,cards,when,whenever,with,from,have,until,control,controls,battlefield,creature,creatures,enters,player,players,their,then,they,them,into,more,does,pay,gets,without,time,turn,end,may,instead,other,only,also,would,least,number,long,graveyard,library,hand,owner,spell,spells,permanent,permanents,abilities,ability,mana,legendary,{t}'.split(','));
- kws=new Set(((cmd.o+' '+(cmd.t.split('—')[1]||'')).toLowerCase().match(/[a-z+\/\-]{4,}/g)||[]).filter(w=>!stop.has(w)));
- tribes=types.map(x=>x.toLowerCase()).filter(t=>tribeRe(t).test(cmd.o)).map(t=>({t,re:tribeRe(t),tre:new RegExp('\\b'+t.replace(/[^a-z]/g,'.?')+'\\b')}));
- deck=new Map();basics={};ups=null;upsFailed=false;sc.clear();profiles=PROFILES.filter(p=>p.d.test(cmd.o.toLowerCase()));setFocus();syncBars();$('#s3').hidden=false;tab(true);render();$('#s3').scrollIntoView({behavior:'smooth'})};
+ deck=new Map();basics={};ups=null;upsFailed=false;sc.clear();
+ readCmdr();syncBars();$('#s3').hidden=false;tab(true);render();$('#s3').scrollIntoView({behavior:'smooth'})};
 
 // ---------- card logic ----------
 function cat(c){
@@ -392,9 +403,108 @@ function setFocus(){const txt=cmd.o.toLowerCase().split(/\n|\.\s/).filter(x=>!/\
  typeFocus=TYPEF.filter(x=>x.d.test(txt)).map(x=>({...x,cre:new RegExp('\\b'+x.n+' creatures?\\b').test(txt)}))}
 async function loadTypes(){if(types.length)return;try{const c=localStorage.getItem('mtg-types');if(c){types=JSON.parse(c);return}const r=await fetch('https://api.scryfall.com/catalog/creature-types');types=(await r.json()).data||[];localStorage.setItem('mtg-types',JSON.stringify(types))}catch(e){}}
 function tribeRe(t){const v=[t,t+'s',t+'es'];if(/f$/.test(t))v.push(t.replace(/f$/,'ves'));if(/fe$/.test(t))v.push(t.replace(/fe$/,'ves'));if(/y$/.test(t))v.push(t.replace(/y$/,'ies'));return new RegExp('\\b('+v.map(x=>x.replace(/[^a-z]/g,'.?')).join('|')+')\\b','i')}
+let tstr='strong',allTribes=[],granted=[];
+const TSTR={strong:1,moderate:.55,off:0};
+const reEsc=x=>x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+// Oracle text with reminder text removed and the card's own name replaced by ~ (so "Gishath, Sun's Avatar" doesn't read as an Avatar deck)
+function cleanText(c){let t=(c.o||'').replace(/\([^)]*\)/g,'');const nm=c.n.split(' // ')[0];[nm,nm.split(',')[0]].filter((x,i,a)=>x&&a.indexOf(x)==i).sort((a,b)=>b.length-a.length).forEach(x=>{t=t.replace(new RegExp(reEsc(x),'gi'),'~')});return t}
+const GRANT=[['flying','flying'],['trample','trample'],['haste','haste'],['lifelink','lifelink'],['deathtouch','deathtouch'],['menace','menace'],['vigilance','vigilance'],['first strike','strike'],['double strike','strike'],['indestructible','protection'],['hexproof','protection']];
+// Keywords the commander gives to other creatures: cards that already have them aren't specially wanted.
+function grantedKw(txt){const out=new Set();txt.toLowerCase().split(/\n|\.\s/).forEach(sn=>{
+ if(!/\b(gains?|have|has|get|gets)\b/.test(sn))return;
+ const m=sn.match(/\b(gains?|have|has)\b(.*)$/);if(!m)return;
+ GRANT.forEach(([k,p])=>{if(new RegExp('\\b'+k+'\\b').test(m[2]))out.add(k+'|'+p)})});
+ return [...out].map(x=>{const [k,p]=x.split('|');return {k,p}})}
+// Work out which creature types the commander cares about: mentioned types, weighted by how often and whether the commander is one itself.
+function detectTribes(c){
+ const txt=cleanText(c),front=c.t.split(' // ')[0],own=(front.split('\u2014')[1]||'').toLowerCase();
+ const sents=txt.split(/\n|\.\s/).filter(x=>!/opponents? controls?/i.test(x));
+ const res=[];
+ types.forEach(T=>{const t=T.toLowerCase(),re=tribeRe(t);let n=0,grant=0;
+  sents.forEach(sn=>{const m=sn.match(new RegExp(re.source,'gi'));if(m){n+=m.length;if(new RegExp('becomes? an? '+re.source,'i').test(sn))grant++}});
+  if(!n)return;
+  const ownHit=new RegExp('\\b'+t.replace(/[^a-z]/g,'.?')+'\\b').test(own);
+  res.push({t,sc:n+(ownHit?2:0)-grant*1.2,own:ownHit,n})});
+ res.sort((a,b)=>b.sc-a.sc);
+ return res.map((x,i)=>({...x,st:i==0?'p':(i<3&&x.sc>=.5?'s':'o')}))}
+function mkTribe(t,st){return {t,st,re:tribeRe(t),tre:new RegExp('\\b'+t.replace(/[^a-z]/g,'.?')+'\\b')}}
+function applyPlan(){tribes=allTribes.filter(x=>x.st!='o');sc.clear()}
+function readCmdr(){
+ const txt=cleanText(cmd);
+ kws=new Set(((txt+' '+(cmd.t.split('\u2014')[1]||'')).toLowerCase().match(/[a-z+\/\-]{4,}/g)||[]).filter(w=>!STOP.has(w)));
+ allTribes=detectTribes(cmd).map(x=>mkTribe(x.t,x.st));
+ granted=grantedKw(txt);
+ profiles=PROFILES.filter(p=>p.d.test(txt.toLowerCase())&&!granted.some(g=>g.p==p.n));
+ setFocus();tstr=allTribes.length?'strong':'off';applyPlan();renderPlan()}
+const STOP=new Set('target,your,that,this,each,card,cards,when,whenever,with,from,have,until,control,controls,battlefield,creature,creatures,enters,player,players,their,then,they,them,into,more,does,pay,gets,without,time,turn,end,may,instead,other,only,also,would,least,number,long,graveyard,library,hand,owner,spell,spells,permanent,permanents,abilities,ability,mana,legendary,{t}'.split(','));
 function tribeHit(c){if(!tribes.length)return 0;const st=(c.t.split(' // ')[0].split('\u2014')[1]||'').toLowerCase();let s=0;
- if(/changeling/i.test(c.o)&&/Creature/.test(c.t))s=12;
- tribes.forEach(x=>{if(x.tre.test(st))s=12;else if(x.re.test(c.o))s=Math.max(s,4)});return s}
+ const chg=/changeling/i.test(c.o)&&/Creature/.test(c.t);
+ tribes.forEach(x=>{const k=x.st=='p'?[26,8,20]:x.st=='s'?[14,5,10]:[12,4,12],m=x.st?TSTR[tstr]:1;
+  let v=0;if(x.tre.test(st))v=k[0];else if(chg)v=k[2];else if(x.re.test(cleanText(c)))v=k[1];
+  s=Math.max(s,v*m)});return s}
+// 'p' = subtype of the main tribe, 's' = secondary tribe, 'pay' = mentions a tribe (lord / payoff)
+function tribeRole(c){if(!tribes.length||!TSTR[tstr])return'';const st=(c.t.split(' // ')[0].split('\u2014')[1]||'').toLowerCase();
+ const isC=/Creature/.test(c.t.split(' // ')[0]);let r='';
+ for(const x of tribes){const mem=(isC&&x.tre.test(st))||(isC&&/changeling/i.test(c.o));
+  if(mem){if(x.st=='p')return'p';r=r||'s'}else if(x.re.test(cleanText(c))&&!r)r=x.st=='p'?'pay':'';}
+ return r}
+function renderPlan(){
+ const el=$('#plan');if(!el)return;
+ const r=rateOf(cmd),chips=allTribes.map((x,i)=>`<button class="tchip ${x.st}" data-ti="${i}" aria-label="${x.t}: ${x.st=='p'?'main tribe':x.st=='s'?'secondary tribe':'off'}. Click to change." title="Click to cycle main / secondary / off">${x.t[0].toUpperCase()+x.t.slice(1)} \u00b7 ${x.st=='p'?'main':x.st=='s'?'side':'off'}</button>`).join('');
+ el.innerHTML=`<h4>How the builder reads this commander</h4>
+ <div><span class="stars" aria-label="${r.stars} out of 5 stars">${starStr(r.stars)}</span> <b>${r.label}</b> <span class="m">as a commander. ${r.why.join('. ')}.</span></div>
+ <div class="chips" role="group" aria-label="Creature types to build around">${chips||'<span class="m">No creature type to build around was found in its text.</span>'}</div>
+ <div class="m">Click a type to switch it between main tribe, secondary and off. ${allTribes.length?'':'You can still add one below.'}</div>
+ <div class="chips"><input id="addT" list="typeList" placeholder="Add a creature type" aria-label="Add a creature type"><datalist id="typeList">${types.map(t=>`<option value="${t}">`).join('')}</datalist><button class="alt" id="addTb">Add</button>
+ <label class="m">Tribal strength <select id="tstr"><option value="strong">Strong</option><option value="moderate">Moderate</option><option value="off">Off</option></select></label></div>
+ ${granted.length?`<div class="m">This commander gives other creatures ${[...new Set(granted.map(g=>g.k))].join(', ')}, so cards that merely have ${granted.length>1?'those':'that'} aren't favoured.</div>`:''}
+ <div class="m">Changes rebuild the deck if one has been built.</div>`;
+ $('#tstr').value=tstr;
+}
+function planChanged(){applyPlan();renderPlan();if(deck.size)auto();else render()}
+$('#plan').addEventListener('click',e=>{const b=e.target.closest('[data-ti]');
+ if(b){const x=allTribes[+b.dataset.ti],hasP=allTribes.some(y=>y!==x&&y.st=='p');x.st=x.st=='p'?'s':x.st=='s'?'o':'p';if(x.st=='p')allTribes.forEach(y=>{if(y!==x&&y.st=='p')y.st='s'});planChanged();return}
+ if(e.target.id=='addTb'){const v=$('#addT').value.trim().toLowerCase();if(!v)return;const ex=allTribes.find(x=>x.t==v);
+  if(ex)ex.st=allTribes.some(y=>y.st=='p'&&y!==ex)?'s':'p';else allTribes.push(mkTribe(v,allTribes.some(y=>y.st=='p')?'s':'p'));
+  if(tstr=='off')tstr='strong';planChanged()}});
+$('#plan').addEventListener('change',e=>{if(e.target.id=='tstr'){tstr=e.target.value;planChanged()}});
+
+// ---------- commander rating ----------
+// How good a card is AS A COMMANDER: a lasting ability and a clear plan to build around. Pure power (Abigale) doesn't count.
+function cmdrRate(c){
+ const why=[];let p=3;
+ const face=(c.o||'').split('\n//\n')[0],txt=cleanText({...c,o:face}),lines=txt.split('\n').map(x=>x.trim()).filter(Boolean);
+ const kwLine=l=>/^((flying|first strike|double strike|lifelink|deathtouch|trample|haste|vigilance|menace|reach|indestructible|hexproof|ward[^,]*|flash|defender|partner[^,]*|haste)(, )?)+$/i.test(l.replace(/\s*\{[^}]*\}/g,''));
+ const abil=lines.filter(l=>!kwLine(l));
+ const etb=l=>/^when ~ enters/i.test(l)||/^when ~ (enters|is put onto)/i.test(l);
+ const trig=abil.filter(l=>/^(whenever|at the beginning|when ~ (attacks|dies|deals|becomes))/i.test(l)||(/^when /i.test(l)&&!etb(l)));
+ const act=abil.filter(l=>/^[^"]*[:\u2236]/.test(l)&&/^(\{|[+\u2212\-]\d|sacrifice|tap|discard|pay|exile|remove)/i.test(l)||/^\{[^}]+\}[^.]*:/.test(l));
+ const stat=abil.filter(l=>/(creatures|[a-z]+s) you control (get|have|gain)|spells you cast|you may (cast|play)|as long as|can't be|costs? \{?\d?\}? ?less|each opponent|players can't/i.test(l)&&!etb(l)&&!trig.includes(l)&&!act.includes(l));
+ const etbs=abil.filter(etb),onlyEtb=etbs.length>0&&!trig.length&&!act.length&&!stat.length;
+ const ongoing=trig.length+act.length+stat.length;
+ if(!abil.length){p-=2;why.push('Only keywords, no ability to build around')}
+ else if(onlyEtb){p-=3;why.push('It only does something when it enters, so it is usually better in the 99')}
+ else if(ongoing){p+=2;why.push('Has a lasting ability that works all game');if(ongoing>=2){p+=.5}}
+ else if(etbs.length){p-=1}
+ // theme / plan to build around
+ const tr=types.length?detectTribes({...c,o:face}).filter(x=>x.sc>=1):[];
+ const tp=PROFILES.filter(q=>q.d.test(txt.toLowerCase())&&!['flying','trample','haste','lifelink','deathtouch','menace','vigilance','strike','protection','defender','flash','etb'].includes(q.n));
+ if(!onlyEtb){
+  if(tr.length){p+=1;why.push('Tells you which creature type to build around ('+tr.slice(0,2).map(x=>x.t).join(', ')+')')}
+  if(tp.length){p+=Math.min(1,.75*tp.length);why.push('Clear theme: '+tp.slice(0,3).map(x=>x.n).join(', '))}
+  if(stat.some(l=>/(other )?[a-z ]*(creatures|[a-z]+s) you control (get|have|gain)/i.test(l))){p+=1;why.push('Boosts your whole team')}
+  const live=[...trig,...act,...stat];
+  if(live.some(l=>/onto the battlefield|without paying|additional combat|extra turn|cast [^.]*from (your )?(graveyard|exile)/i.test(l))){p+=1.5;why.push('Puts creatures or spells into play for free')}
+  if(trig.some(l=>/\b(three|four|five|six|seven|eight|\d+) or more\b/i.test(l))){p-=1.5;why.push('Its main trigger needs several creatures first, so it is hard to set off')}
+ }
+ if(/partner|choose a background|friends forever|doctor's companion/i.test(txt)){p+=.5;why.push('Can be paired with a second commander')}
+ if(/can be your commander/i.test(txt)&&!/Creature/.test(c.t)){p+=.5}
+ if(c.cmc>=8){p-=1;why.push('Very expensive to cast again and again')}
+ const nc=(c.ci||[]).length;if(nc>=4){p-=1.5;why.push(nc+' colours makes the deck harder to build')}else if(nc==3){p-=.5}
+ const pts=Math.round(p*10)/10,stars=pts>=7.5?5:pts>=6.5?4:pts>=5?3:pts>=3.5?2:1;
+ const label=['','Better in the 99','Weak commander','Solid commander','Strong commander','Built to lead'][stars];
+ return {stars,pts,label,why:why.length?why:['Nothing stands out as a commander plan']}}
+
 const sc=new Map();
 function ev(c){
  if(sc.has(c.n))return sc.get(c.n);
@@ -406,6 +516,7 @@ function ev(c){
  const w=new Set((o+' '+c.t.toLowerCase()).match(/[a-z+\/\-]{4,}/g)||[]);let g=0;kws.forEach(k=>{if(w.has(k))g++});v+=Math.min(g,5)*.5;
  v+=c.er?Math.max(0,10-2.5*Math.log10(c.er))*.6:0;
  v-=Math.max(0,c.cmc-6)*.4;
+ if(granted.length&&/Creature/.test(c.t.split(' // ')[0])&&granted.some(g=>new RegExp('\\b'+g.k+'\\b').test(o.split('\n').slice(0,2).join(' ')) ))v-=2;
  const r={s:v,why};sc.set(c.n,r);return r}
 const score=c=>ev(c).s;
 const elig=()=>lib.filter(c=>cmd&&c.n!=cmd.n&&!/Basic/.test(c.t)&&(c.l=='legal'||c.l=='restricted')&&c.ci.every(x=>cmd.ci.includes(x)));
@@ -423,22 +534,26 @@ function auto(){
  deck=new Map();
  const pool=elig().sort((a,b)=>score(b)-score(a)||a.cmc-b.cmc);
  // Template from common Commander guides: ~36-38 lands, 10-12 ramp, ~10 draw, ~10 interaction, 2-3 wipes, rest is the plan.
- const agg=profiles.some(p=>p.agg),tr=tribes.length>0,spell=profiles.some(p=>p.n=='spells'),big=cmd.cmc>=5;
+ const agg=profiles.some(p=>p.agg),tr=tribes.length>0&&TSTR[tstr]>0,spell=profiles.some(p=>p.n=='spells'),big=cmd.cmc>=5;
+ const TQ=tstr=='strong'?{p:22,s:6,pay:5}:{p:14,s:3,pay:3};
  const L=agg&&cmd.cmc<=3?35:big?37:36,R=big?11:10,D=agg?8:10,V=agg?7:9,W=agg?0:2;
  const N=99-L;let C=agg||tr?27:spell?10:Math.max(20,...profiles.map(p=>p.cre||0));
  if(typeFocus.some(f=>f.cre))C=Math.max(C,22);
  profiles.forEach(p=>{if(p.crt)C=Math.min(C,p.crt)});
+ if(tr)C=Math.max(C,TQ.p+TQ.s+4);
  const Ccap=C+3;
  // share of non-land slots per mana value: 0-1, 2, 3, 4, 5, 6, 7+ (caps include slack)
  const F=[.09,.21,.21,.17,.12,.09,.07],cap=F.map((f,i)=>Math.ceil(f*N*(i>=4&&(agg||tr)?1.4:1.25)));
  const cnt=Array(7).fill(0),isC=c=>/Creature/.test(c.t.split(' // ')[0]),B=c=>Math.min(7,Math.max(1,Math.floor(c.cmc)))-1;
  let nl=0,nc=0;
+ const nonL=c=>cat(c)!='Land'&&!(agg&&cat(c)=='Wipe');
  const take=(f,n,relax)=>{for(const c of pool){if(n<=0)break;if(deck.has(c.n)||!f(c))continue;
   const land=cat(c)=='Land',b=B(c);
   if(!land&&!relax&&(cnt[b]>=cap[b]||(isC(c)&&nc>=Ccap)))continue;
   deck.set(c.n,c);n--;if(!land){cnt[b]++;nl++;if(isC(c))nc++}}};
- const nonL=c=>cat(c)!='Land'&&!(agg&&cat(c)=='Wipe');
- take(c=>cat(c)=='Ramp',R);take(c=>cat(c)=='Draw',D);take(c=>cat(c)=='Removal',V);if(W)take(c=>cat(c)=='Wipe',W);
+ if(tr){take(c=>nonL(c)&&tribeRole(c)=='p',TQ.p);take(c=>nonL(c)&&tribeRole(c)=='pay',TQ.pay);take(c=>nonL(c)&&tribeRole(c)=='s',TQ.s)}   // the tribe comes first
+ const have=k=>[...deck.values()].filter(c=>cat(c)==k).length;
+ take(c=>cat(c)=='Ramp',R-have('Ramp'));take(c=>cat(c)=='Draw',D-have('Draw'));take(c=>cat(c)=='Removal',V-have('Removal'));if(W)take(c=>cat(c)=='Wipe',W-have('Wipe'));
  take(c=>nonL(c)&&isC(c),C-nc);          // creatures up to the target
  take(c=>nonL(c)&&!isC(c),N-nl);          // then non-creature support
  take(nonL,N-nl);take(nonL,N-nl,true);    // if the collection is short, relax the limits
@@ -449,7 +564,7 @@ function auto(){
 function render(){
  $('#dtitle').textContent=cmd.n;
  const total=deck.size+Object.values(basics).reduce((a,b)=>a+b,0)+1;
- $('#dsub').textContent=`${cmd.mc} · ${cmd.t} · ${total}/100 cards`+(tribes.length?` · Tribe: ${tribes.map(x=>x.t).join(', ')}`:'')+((profiles.length||typeFocus.length)?` · Synergies: ${[...profiles.map(x=>x.n),...typeFocus.map(f=>f.n+(f.cre?' creatures':''))].join(', ')}`:'');
+ $('#dsub').textContent=`${cmd.mc} · ${cmd.t} · ${total}/100 cards`+(tribes.length?` · Tribe: ${tribes.map(x=>x.t+(x.st=='s'?' (side)':'')).join(', ')}`:'')+((profiles.length||typeFocus.length)?` · Synergies: ${[...profiles.map(x=>x.n),...typeFocus.map(f=>f.n+(f.cre?' creatures':''))].join(', ')}`:'');
  const nonland=[...deck.values()].filter(c=>cat(c)!='Land').length;
  $('#warn').textContent=total<100?`${100-total} slots open. Add cards or use Auto-build.`:total>100?`${total-100} cards over the limit.`:'';
  const cur=Array(8).fill(0);deck.forEach(c=>{if(cat(c)!='Land')cur[Math.min(7,Math.floor(c.cmc))]++});
@@ -460,7 +575,7 @@ function render(){
  const g={};deck.forEach(c=>(g[typeOf(c)]=g[typeOf(c)]||[]).push(c));
  const roles={};deck.forEach(c=>{const k=cat(c);roles[k]=(roles[k]||0)+1});
  const bt=Object.values(basics).reduce((a,b)=>a+b,0),nlc=[...deck.values()].filter(c=>cat(c)!='Land');
- $('#dstat').textContent=`Lands ${(g.Land||[]).length+bt} \u00b7 Creatures ${(g.Creature||[]).length} \u00b7 Ramp ${roles.Ramp||0} \u00b7 Draw ${roles.Draw||0} \u00b7 Removal ${roles.Removal||0} \u00b7 Wipes ${roles.Wipe||0} \u00b7 Avg mana value ${nlc.length?(nlc.reduce((a,c)=>a+c.cmc,0)/nlc.length).toFixed(1):'-'}`;
+ $('#dstat').textContent=`Lands ${(g.Land||[]).length+bt} \u00b7 Creatures ${(g.Creature||[]).length} \u00b7 Ramp ${roles.Ramp||0} \u00b7 Draw ${roles.Draw||0} \u00b7 Removal ${roles.Removal||0} \u00b7 Wipes ${roles.Wipe||0} \u00b7 Avg mana value ${nlc.length?(nlc.reduce((a,c)=>a+c.cmc,0)/nlc.length).toFixed(1):'-'}`+(tribes.length&&TSTR[tstr]?' \u00b7 '+tribes.map(x=>{const n=[...deck.values()].filter(c=>x.tre.test((c.t.split(' // ')[0].split('\u2014')[1]||'').toLowerCase())||(/changeling/i.test(c.o)&&/Creature/.test(c.t))).length;return x.t[0].toUpperCase()+x.t.slice(1)+'s '+n}).join(' \u00b7 '):'');
  const order=['Creature','Planeswalker','Instant','Sorcery','Artifact','Enchantment','Other','Land'];let h=deck.size?`<h4>Commander</h4><div class="row" data-n="${enc(cmd.n)}"><span>${cmd.n}</span><span class="c">${cmd.mc}</span></div>`:'';
  order.forEach(k=>{if(!g[k])return;
   const bc=k=='Land'?Object.values(basics).reduce((a,b)=>a+b,0):0;
@@ -553,7 +668,7 @@ const rOn=k=>flt.r[k][0]>RB[k][0]||flt.r[k][1]<RB[k][1];
 const inR=(k,v)=>v>=flt.r[k][0]&&(flt.r[k][1]>=RB[k][1]||v<=flt.r[k][1]);
 const active=t=>t.length>0||Object.keys(flt.r).some(rOn)||flt.types.size>0||flt.cols.size>0||!!flt.set||!!flt.rar;
 const metaOf=c=>{const o=meta.get(c.n);return{sets:o&&o.sets.size?o.sets:new Set(c.sn?[c.sn]:[]),rars:o&&o.rars.size?o.rars:new Set(c.r?[c.r]:[])}};
-function addMeta(n,st,rr,id){const o=metaRaw.get(n)||{sets:new Set(),rars:new Set(),pr:new Map()};if(st&&st.trim()){o.sets.add(st.trim());if(id&&!o.pr.has(st.trim()))o.pr.set(st.trim(),id)}if(rr&&rr.trim())o.rars.add(rr.trim().toLowerCase());metaRaw.set(n,o)}
+function addMeta(n,st,rr,id,cn){const o=metaRaw.get(n)||{sets:new Set(),rars:new Set(),pr:new Map(),cn:new Map()};if(st&&st.trim()){o.sets.add(st.trim());if(id&&!o.pr.has(st.trim()))o.pr.set(st.trim(),id);if(cn&&!o.cn.has(st.trim()))o.cn.set(st.trim(),cn)}if(rr&&rr.trim())o.rars.add(rr.trim().toLowerCase());metaRaw.set(n,o)}
 function passes(c){
  if(!inR('mv',c.cmc))return false;
  if(rOn('pw')&&(c.pw===''||c.pw==null||!inR('pw',num(c.pw))))return false;
@@ -568,11 +683,17 @@ function passes(c){
   return cs.length==sel.size&&cs.every(x=>sel.has(x))}
  return true}
 const RARK={mythic:0,rare:1,uncommon:2,common:3},TYK=['Creature','Planeswalker','Instant','Sorcery','Artifact','Enchantment','Land'];
-const SORTS=[['name','Name A\u2013Z'],['named','Name Z\u2013A'],['mv','Mana value, low to high'],['mvd','Mana value, high to low'],['pw','Power, high to low'],['tg','Toughness, high to low'],['price','Price, high to low'],['pricea','Price, low to high'],['rar','Rarity, rarest first'],['own','Copies owned, most first'],['type','Card type'],['col','Colour'],['pop','Popularity (EDHREC)'],['syn','Synergy with commander']];
+const SORTS=[['name','Name A\u2013Z'],['named','Name Z\u2013A'],['mv','Mana value, low to high'],['mvd','Mana value, high to low'],['pw','Power, high to low'],['tg','Toughness, high to low'],['price','Price, high to low'],['pricea','Price, low to high'],['set','Set (newest first), then card number'],['rar','Rarity, rarest first'],['own','Copies owned, most first'],['type','Card type'],['col','Colour'],['pop','Popularity (EDHREC)'],['syn','Synergy with commander']];
 const sortOpts=(extra)=>SORTS.filter(x=>!(extra&&extra.includes(x[0]))).map(([k,l])=>`<option value="${k}">${l}</option>`).join('');
+const setOfCard=c=>{const sr=$('#tool-search');if(sr&&!sr.hidden&&flt.set)return flt.set;return c.sn||[...metaOf(c).sets][0]||''};
+const setDate=n=>{const i=setInfo&&setInfo[n.toLowerCase()];return i&&i.date||''};
+const cnKey=(c,set)=>{const m=meta.get(c.n),v=(m&&m.cn&&m.cn.get(set))||(c.sn==set?c.cn:'')||'',n=parseInt(v);return[isNaN(n)?99999:n,String(v)]};
 const sorter=m=>{const nm=(a,b)=>a.n.localeCompare(b.n),by=f=>(a,b)=>f(a)-f(b)||nm(a,b),st=v=>v===''||v==null?1e3:-num(v);
  const col=c=>c.ci.length==1?'WUBRG'.indexOf(c.ci[0]):c.ci.length>1?5:6;
  switch(m){
+  case'set':return(a,b)=>{const sa=setOfCard(a),sb=setOfCard(b),da=setDate(sa),db=setDate(sb);
+   if(da!=db)return da<db?1:-1;if(sa!=sb)return sa.localeCompare(sb);
+   const x=cnKey(a,sa),y=cnKey(b,sb);return x[0]-y[0]||x[1].localeCompare(y[1])||nm(a,b)};
   case'named':return(a,b)=>nm(b,a);
   case'mv':return by(c=>c.cmc);case'mvd':return by(c=>-c.cmc);
   case'pw':return by(c=>st(c.pw));case'tg':return by(c=>st(c.tg));
@@ -616,7 +737,7 @@ document.addEventListener('input',e=>{const t=e.target,k=t.dataset&&t.dataset.r;
  const v=+t.value,r=flt.r[k];if(t.dataset.end=='min')r[0]=Math.min(v,r[1]);else r[1]=Math.max(v,r[0]);syncBars();refresh()});
 document.addEventListener('change',e=>{const t=e.target,f=t.dataset&&t.dataset.f;if(!f)return;
  if(f=='mode')flt.mode=t.value;else if(f=='set')flt.set=t.value;else if(f=='rar')flt.rar=t.value;
- else if(f=='sort')flt['sort'+({fbarG:'G',fbarS:'S',fbarT:'T',fbarP:'P'}[t.closest('.fbar').id])]=t.value
+ else if(f=='sort'){flt['sort'+({fbarG:'G',fbarS:'S',fbarT:'T',fbarP:'P'}[t.closest('.fbar').id])]=t.value;if(t.value=='set')ensureSetSort()}
  syncBars();refresh()});
 document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('.fbar button');if(!b)return;
  if(b.dataset.col){const k=b.dataset.col;flt.cols.has(k)?flt.cols.delete(k):flt.cols.add(k)}
@@ -677,10 +798,10 @@ const idb={db:null,open(){return this.db||(this.db=new Promise((res,rej)=>{const
  async get(k){try{const d=await this.open();return await new Promise(res=>{const q=d.transaction('kv').objectStore('kv').get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>res(undefined)})}catch(e){return undefined}},
  async set(k,v){try{const d=await this.open();return await new Promise(res=>{const t=d.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=()=>res(true);t.onerror=()=>res(false)})}catch(e){return false}}};
 let collT=0;
-const collPayload=()=>({t:collT,lib,qty:[...qty],foil:[...foilN],meta:[...meta].map(([k,v])=>[k,{sets:[...v.sets],rars:[...v.rars],pr:[...(v.pr||[])]}])});
+const collPayload=()=>({t:collT,lib,qty:[...qty],foil:[...foilN],meta:[...meta].map(([k,v])=>[k,{sets:[...v.sets],rars:[...v.rars],pr:[...(v.pr||[])],cn:[...(v.cn||[])]}])});
 const persist=()=>idb.set('coll',collPayload());
 function applyColl(d){if(!d||!d.lib||!d.lib.length||d.lib[0].fm===undefined)return false;
- lib=d.lib;qty=new Map(d.qty);foilN=new Map(d.foil||[]);collT=d.t;meta=new Map((d.meta||[]).map(([k,v])=>[k,{sets:new Set(v.sets),rars:new Set(v.rars),pr:new Map(v.pr||[])}]));
+ lib=d.lib;qty=new Map(d.qty);foilN=new Map(d.foil||[]);collT=d.t;meta=new Map((d.meta||[]).map(([k,v])=>[k,{sets:new Set(v.sets),rars:new Set(v.rars),pr:new Map(v.pr||[]),cn:new Map(v.cn||[])}]));
  ownSet=new Set(lib.map(c=>c.n));RB.cp[1]=Math.min(12,Math.max(1,...qty.values()));flt.r.cp=[1,RB.cp[1]];fillOpts();syncBars();return true}
 async function restore(){applyColl(await idb.get('coll'))}
 const hDatesN=()=>Object.keys(hist.d).length;
@@ -765,6 +886,7 @@ async function loadSets(){
  $('#dsetmsg').textContent=dsets.length?'':'Could not load the list of sets. You can still type a set code, e.g. ECL.'}
 async function loadSetCards(code){
  dcode=code;$('#dsetmsg').textContent='Loading set\u2026';let cs=await idb.get('set:'+code);
+ if(cs&&cs[0]&&cs[0].cn===undefined)cs=null; // saved before card numbers were kept
  if(!cs){cs=[];let url='https://api.scryfall.com/cards/search?unique=cards&order=name&q='+enc('e:'+code+' -t:basic');
   try{for(let i=0;i<8&&url;i++){const r=await fetch(url);if(!r.ok)break;const j=await r.json();cs.push(...j.data.map(slim));url=j.has_more?j.next_page:null;await sleep(110)}
    if(cs.length)idb.set('set:'+code,cs)}catch(e){}}
@@ -822,7 +944,7 @@ $('#tool-draft').addEventListener('click',e=>{if(e.target.closest('[data-info]')
  else if(e.target.dataset.save!==undefined)openSave(dText(dout),'40','','Draft deck'+(dcode?' - '+dcode:''));
  else if(e.target.dataset.chk!==undefined)chkLoad(dText(dout),'40');
  else if(e.target.dataset.dl!==undefined){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([dText(dout)],{type:'text/plain'}));a.download='draft-deck.txt';a.click()}});
-$('#dsort').innerHTML=sortOpts(['own','syn']);$('#dsort').onchange=dsearch;$('#dq').oninput=dsearch;$('#dset').onchange=chooseSet;$('#dset').onkeydown=e=>{if(e.key=='Enter')chooseSet()};
+$('#dsort').innerHTML=sortOpts(['own','syn']);$('#dsort').onchange=()=>{dsearch();if($('#dsort').value=='set')ensureSetSort()};$('#dq').oninput=dsearch;$('#dset').onchange=chooseSet;$('#dset').onkeydown=e=>{if(e.key=='Enter')chooseSet()};
 $('#dimp').onclick=dimport;$('#dbuild').onclick=buildDraft;
 $('#dclear').onclick=()=>{dpool=new Map();dout=null;savePool();renderDraft()};
 document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-tool]');if(t&&!t.disabled)openTool(t.dataset.tool)});
@@ -1254,6 +1376,17 @@ $('#chkSave').onclick=()=>{const t=$('#chkText').value;if(!t.trim()){$('#chkMsg'
  const cn=p.cmd[0]||$('#chkCmd').value.trim();openSave(t,fmt,cn,cn||'Imported deck',chkId)};
 (async()=>{const d=await idb.get('decks');if(Array.isArray(d))decks=d})();
 
+// Sorting by set needs each set's release date and the collector number of the printing you own.
+let cnBusy=false;
+async function ensureSetSort(){
+ if(cnBusy)return;cnBusy=true;
+ try{await loadSetInfo();refresh();
+  const need=[];lib.forEach(c=>{const m=meta.get(c.n);if(m&&m.pr)m.pr.forEach((id,set)=>{if(!(m.cn&&m.cn.has(set)))need.push({n:c.n,set,id})})});
+  for(let i=0;i<need.length;i+=75){const b=need.slice(i,i+75);$('#gcount').textContent=`Looking up card numbers for sorting\u2026 ${Math.min(i+75,need.length)} of ${need.length}`;
+   const by=new Map((await post(b.map(x=>({id:x.id})))).map(c=>[c.id,c.collector_number]));
+   b.forEach(x=>{const v=by.get(x.id),m=meta.get(x.n);if(v!=null&&m){m.cn=m.cn||new Map();m.cn.set(x.set,v)}});await sleep(110)}
+  if(need.length)persist();refresh();if(!$('#tool-draft').hidden)dsearch()}
+ catch(e){}finally{cnBusy=false;refresh()}}
 // ---------- collection stats ----------
 const st={by:'copies',sort:'pct',min:true,all:false};
 const SPAL=['#3987e5','#d95926','#199e70','#c98500','#d55181','#008300','#9085e9','#8a8f98'];
