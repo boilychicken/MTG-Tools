@@ -62,6 +62,7 @@ label.row input{margin-right:6px}
 .chip.wide{width:auto;border-radius:8px;padding:0 12px;background:transparent;color:var(--tx);border:1px solid var(--line);opacity:1;font-weight:600}
 .chip.wide[aria-pressed=true]{background:var(--gold);color:#201a08;border-color:var(--gold)}
 .csrow{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}.csrow input{flex:1;min-width:180px}.csrow select{background:#0f1815;color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:6px}
+.pwt{border-collapse:collapse;margin:6px 0;font-size:13px}.pwt th,.pwt td{border:1px solid var(--line);padding:3px 8px;text-align:left}
 .plan{margin:8px 0;padding:10px;border:1px solid var(--line);border-radius:8px;font-size:14px}
 .plan h4{margin:0 0 6px}.plan .chips{margin:6px 0}
 .tchip{border-radius:16px;padding:5px 12px;background:transparent;color:var(--tx);border:1px solid var(--line);font-weight:600}
@@ -155,7 +156,7 @@ dialog{background:var(--panel);color:var(--tx);border:1px solid var(--line);bord
 
 <section class="panel" id="s2" hidden>
 <h2>Choose a commander</h2>
-<div class="csrow"><input type="search" id="csearch" placeholder="Search your legendary creatures" aria-label="Search commanders"><select id="csort" aria-label="Sort commanders"><option value="best">Best commanders first</option><option value="az">A–Z</option></select></div><p class="m">Stars show how well a card works as a commander (a lasting ability, a clear theme to build around) rather than how strong it is in general. Cards that only do something when they enter are usually better in the 99.</p>
+<div class="csrow"><input type="search" id="csearch" placeholder="Search your legendary creatures" aria-label="Search commanders"></div>
 <div class="grid" id="clist"></div>
 </section>
 
@@ -165,6 +166,7 @@ dialog{background:var(--panel);color:var(--tx);border:1px solid var(--line);bord
 <div class="m" id="dsub"></div>
 <div id="plan" class="plan"></div>
 <div class="m" id="dstat"></div>
+<div id="pwr"></div>
 <div class="tools"><button id="auto">Auto-build deck</button><button class="alt" id="copy">Copy list</button><button class="alt" id="tochk">Check this deck</button><button class="alt" id="tosave">Save deck</button><button class="alt" id="dl">Download .txt</button><button class="alt" id="back">Change commander</button></div>
 <div id="warn" class="bad m"></div>
 <div class="bars" id="curve" aria-label="Mana curve"></div>
@@ -341,11 +343,10 @@ const rateCache=new Map();
 function rateOf(c){if(!rateCache.has(c.n))rateCache.set(c.n,cmdrRate(c));return rateCache.get(c.n)}
 const starStr=n=>'\u2605'.repeat(n)+'\u2606'.repeat(5-n);
 function showCmds(){
- const q=$('#csearch').value.toLowerCase(),by=$('#csort').value;
- const l=lib.filter(c=>isCmdr(c)&&c.n.toLowerCase().includes(q)).sort((a,b)=>by=='best'?(rateOf(b).stars-rateOf(a).stars||rateOf(b).pts-rateOf(a).pts||a.n.localeCompare(b.n)):a.n.localeCompare(b.n));
- $('#clist').innerHTML=l.length?l.map(c=>{const r=rateOf(c);return `<button class="cmd" data-c="${enc(c.n)}" title="${r.why.join('. ').replace(/"/g,'&quot;')}"><img src="${c.img}" alt=""><span>${c.n}<br><span class="m">${c.ci.join('')||'Colourless'}</span><br><span class="stars" aria-label="${r.stars} out of 5 stars">${starStr(r.stars)}</span> <span class="m">${r.label}</span></span></button>`}).join(''):'<p class="m">No legal commanders found in your collection.</p>';
+ const q=$('#csearch').value.toLowerCase();
+ const l=lib.filter(c=>isCmdr(c)&&c.n.toLowerCase().includes(q)).sort((a,b)=>a.n.localeCompare(b.n));
+ $('#clist').innerHTML=l.length?l.map(c=>{const r=rateOf(c);return `<button class="cmd" data-c="${enc(c.n)}"><img src="${c.img}" alt=""><span>${c.n}<br><span class="m">${c.ci.join('')||'Colourless'}${r.stars<=1?' · often better in the 99':''}</span></span></button>`}).join(''):'<p class="m">No legal commanders found in your collection.</p>';
 }
-$('#csort').onchange=showCmds;
 $('#clist').onclick=e=>{const b=e.target.closest('[data-c]');if(!b)return;
  cmd=lib.find(c=>c.n==decodeURIComponent(b.dataset.c));
  deck=new Map();basics={};ups=null;upsFailed=false;sc.clear();
@@ -453,7 +454,7 @@ function renderPlan(){
  const el=$('#plan');if(!el)return;
  const r=rateOf(cmd),chips=allTribes.map((x,i)=>`<button class="tchip ${x.st}" data-ti="${i}" aria-label="${x.t}: ${x.st=='p'?'main tribe':x.st=='s'?'secondary tribe':'off'}. Click to change." title="Click to cycle main / secondary / off">${x.t[0].toUpperCase()+x.t.slice(1)} \u00b7 ${x.st=='p'?'main':x.st=='s'?'side':'off'}</button>`).join('');
  el.innerHTML=`<h4>How the builder reads this commander</h4>
- <div><span class="stars" aria-label="${r.stars} out of 5 stars">${starStr(r.stars)}</span> <b>${r.label}</b> <span class="m">as a commander. ${r.why.join('. ')}.</span></div>
+ ${r.stars<=1?`<div class="m"><b>Often better in the 99:</b> ${r.why.join('. ')}.</div>`:''}
  <div class="chips" role="group" aria-label="Creature types to build around">${chips||'<span class="m">No creature type to build around was found in its text.</span>'}</div>
  <div class="m">Click a type to switch it between main tribe, secondary and off. ${allTribes.length?'':'You can still add one below.'}</div>
  <div class="chips"><input id="addT" list="typeList" placeholder="Add a creature type" aria-label="Add a creature type"><datalist id="typeList">${types.map(t=>`<option value="${t}">`).join('')}</datalist><button class="alt" id="addTb">Add</button>
@@ -577,6 +578,7 @@ function render(){
  const roles={};deck.forEach(c=>{const k=cat(c);roles[k]=(roles[k]||0)+1});
  const bt=Object.values(basics).reduce((a,b)=>a+b,0),nlc=[...deck.values()].filter(c=>cat(c)!='Land');
  $('#dstat').textContent=`Lands ${(g.Land||[]).length+bt} \u00b7 Creatures ${(g.Creature||[]).length} \u00b7 Ramp ${roles.Ramp||0} \u00b7 Draw ${roles.Draw||0} \u00b7 Removal ${roles.Removal||0} \u00b7 Wipes ${roles.Wipe||0} \u00b7 Avg mana value ${nlc.length?(nlc.reduce((a,c)=>a+c.cmc,0)/nlc.length).toFixed(1):'-'}`+(tribes.length&&TSTR[tstr]?' \u00b7 '+tribes.map(x=>{const n=[...deck.values()].filter(c=>x.tre.test((c.t.split(' // ')[0].split('\u2014')[1]||'').toLowerCase())||(/changeling/i.test(c.o)&&/Creature/.test(c.t))).length;return x.t[0].toUpperCase()+x.t.slice(1)+'s '+n}).join(' \u00b7 '):'');
+ pwrUpdate();
  const order=['Creature','Planeswalker','Instant','Sorcery','Artifact','Enchantment','Other','Land'];let h=deck.size?`<h4>Commander</h4><div class="row" data-n="${enc(cmd.n)}"><span>${cmd.n}</span><span class="c">${cmd.mc}</span></div>`:'';
  order.forEach(k=>{if(!g[k])return;
   const bc=k=='Land'?Object.values(basics).reduce((a,b)=>a+b,0):0;
@@ -1204,6 +1206,59 @@ function healthChecks(d){
  Object.keys(pips).filter(x=>pips[x]>0).forEach(x=>{const need=Math.max(mn,Math.round(lands*(pips[x]/tp)*.9)),nm={W:'White',U:'Blue',B:'Black',R:'Red',G:'Green'}[x];
   add(src[x]==0?'bad':src[x]<need?'warn':'ok',`${nm}: ${src[x]} land${src[x]==1?'':'s'} make it, for ${Math.round(pips[x])} coloured symbols (rule of thumb: about ${need}).`)});
  return{R,total,nn,lands,avg}}
+// ---------- deck power level (1-10) ----------
+// Counts the things that make a Commander deck faster, more consistent and harder to stop, then scales to 1-10. A guide, not a verdict:
+// it cannot see two-card combos or how well the cards work together.
+const PW_FASTM=new Set(['Sol Ring','Mana Crypt','Mana Vault','Chrome Mox','Mox Diamond','Mox Opal','Jeweled Lotus','Lotus Petal','Grim Monolith','Ancient Tomb','Dark Ritual','Cabal Ritual','Mox Amber','Mox Tantalite','Mox Pearl','Mox Sapphire','Mox Jet','Mox Ruby','Mox Emerald','Basalt Monolith','Arcane Signet','Fellwar Stone','Mind Stone','Thought Vessel','Signets','Talisman']);
+function powerLevel(ents,cmds,gc){
+ const all=[...ents,...cmds.map(c=>({c,n:1}))],cn=f=>all.reduce((a,e)=>a+(f(e.c)?e.n:0),0),nl=e=>!isLandC(e);
+ const low=c=>(c.o||'').toLowerCase(),nonLand=all.filter(e=>!isLandC(e.c)),nn=nonLand.reduce((a,e)=>a+e.n,0)||1;
+ const lands=cn(isLandC);
+ const ramp=cn(c=>!isLandC(c)&&cat(c)=='Ramp'),draw=cn(c=>!isLandC(c)&&cat(c)=='Draw'),removal=cn(c=>!isLandC(c)&&cat(c)=='Removal'),wipes=cn(c=>cat(c)=='Wipe');
+ const tut=cn(c=>!isLandC(c)&&/search your library for (a|an|up to \w+) /.test(low(c))&&!/\bland\b|basic|plains|island|swamp|mountain|forest/.test((low(c).match(/search your library for [^.]*/)||[''])[0]));
+ const counters=cn(c=>/counter target (spell|noncreature|creature spell|activated|instant)/.test(low(c)));
+ const tokens=cn(c=>/create [^.]{0,60}tokens?/.test(low(c)));
+ const stax=cn(c=>/can't (cast|attack|activate|search|draw)|each (player|opponent) sacrifices|spells (your opponents|opponents|each opponent) cast cost|don't untap|doesn't untap|players can't/.test(low(c)));
+ const lords=cn(c=>/other [a-z]+s? you control get \+|creatures you control get \+/.test(low(c)));
+ const combo=cn(c=>/extra turn|win the game|each opponent loses|infinite|untap (all|target) (permanent|land|creature)s?|copy (target|each|that) (spell|permanent)|you may cast [^.]*without paying|whenever you cast [^.]*copy/.test(low(c)));
+ const fast=cn(c=>PW_FASTM.has(c.n)||(!isLandC(c)&&c.cmc<=2&&/\badd \{/.test(low(c))&&/Artifact|Instant|Sorcery/.test(c.t)));
+ const rare=cn(c=>c.r&&c.r!='common'&&!isLandC(c));
+ const gcs=gc?all.filter(e=>gc.has(e.c.n)):[],gn=gcs.reduce((a,e)=>a+e.n,0);
+ const avg=nonLand.reduce((a,e)=>a+e.c.cmc*e.n,0)/nn;
+ const P=[];let sc=2;
+ const add=(label,v,max)=>{v=Math.max(-1,Math.min(max,v));sc+=v;P.push({label,v:Math.round(v*10)/10,max})};
+ add('Game Changers',gn*.5,3);
+ add('Tutors',tut*.3,1.5);
+ add('Fast mana',fast*.3,1.2);
+ add('Mana efficiency',(3.6-avg)*1.1,1.5);
+ add('Consistency (ramp and draw)',(Math.min(ramp,12)/12+Math.min(draw,10)/10)*.6,1.2);
+ add('Interaction',(removal+counters+wipes*.5)/10,1);
+ add('Win and combo pieces',combo*.4,1.5);
+ if(lands&&(lands<31||lands>40))add('Land count',-.5,0);
+ const score=Math.max(1,Math.min(10,Math.round(sc*2)/2));
+ const band=score>=9?'cEDH territory: very efficient, hard to stop':score>=7?'Optimised: a focused plan and a good mana base':score>=5?'Upgraded precon or a deck with a clear plan':score>=3?'Precon level: basic strategy':'Casual pile: limited power';
+ const rows=[['Ramp',ramp,'10 to 15'],['Card draw',draw,'10 or more'],['Removal',removal,'5 to 10'],['Tutors',tut,'0 to 10'],['Counterspells',counters,'0 to 10'],['Token makers',tokens,'0 to 15'],['Lords',lords,'0 to 15'],['Stax pieces',stax,'0 to 15'],['Combo-type pieces',combo,'0 to 15'],['Non-common cards',rare,'75 or more']];
+ const tips=[];
+ if(ramp<10)tips.push(`Add ramp: ${ramp} found, 10 or more keeps the deck from stalling.`);
+ if(draw<10)tips.push(`Add card draw: ${draw} found, 10 or more keeps your hand full.`);
+ if(removal<5)tips.push(`Add removal: ${removal} found, you want at least 5.`);
+ if(avg>3.6)tips.push(`Lower the curve: average mana value is ${avg.toFixed(1)}.`);
+ if(!tut&&score<8)tips.push('A few tutors (cards that fetch a specific card) make the deck more consistent.');
+ return{score,band,rows,P,avg,gn,gcs,tips,hasGC:!!gc}}
+function powerHtml(r,title){
+ return`<div class="brk"><b>${title||'Power level'}: ${r.score} / 10</b> <span class="m">${r.band}</span>
+ <div class="m">${r.hasGC?`Game Changers: ${r.gn}${r.gn?` (${r.gcs.map(e=>e.c.n).slice(0,5).join(', ')}${r.gcs.length>5?'…':''})`:''}.`:'The Game Changers list could not be loaded, so that part is not counted.'} Average mana value ${r.avg.toFixed(1)}.</div>
+ <details><summary class="m">What counted</summary><div class="m">${r.P.map(p=>`${p.label}: ${p.v>=0?'+':''}${p.v}`).join(' · ')}</div>
+ <table class="pwt"><tr><th scope="col">Cards of type</th><th scope="col">In deck</th><th scope="col">Usual range</th></tr>${r.rows.map(([n,v,g])=>`<tr><td>${n}</td><td>${v}</td><td>${g}</td></tr>`).join('')}</table></details>
+ ${r.tips.length?`<ul class="chk">${r.tips.map(t=>`<li><span>${esc(t)}</span></li>`).join('')}</ul>`:''}
+ <div class="m">A guide only. It counts card types and can't see two-card combos or how well the cards work together, so talk to your table about power before a game.</div></div>`}
+let pwTok=0;
+async function pwrUpdate(){const el=$('#pwr'),t=++pwTok;if(!el||!cmd||!deck.size){if(el)el.innerHTML='';return}
+ const gc=await loadGC().catch(()=>null);if(t!=pwTok)return;
+ const ents=[...deck.values()].map(c=>({c,n:1}));
+ const bt=Object.values(basics).reduce((a,b)=>a+b,0);
+ const r=powerLevel(ents,[cmd],gc);
+ el.innerHTML=powerHtml(r,'Deck power level')+(bt?'':'')}
 function bracketInfo(d){
  if(d.fmt!='commander')return'';
  if(!d.gc)return`<div class="m">Bracket estimate unavailable: couldn't load the Game Changers list from Scryfall.</div>`;
@@ -1225,7 +1280,7 @@ function renderCheck(){
  const h=healthChecks(d),ic={ok:'✔',warn:'⚠',bad:'✖',info:'•'},bad=h.R.filter(r=>r[0]=='bad').length,warn=h.R.filter(r=>r[0]=='warn').length;
  let o=`<h2>${FMTS[d.fmt]} deck: ${d.cmds.length?esc(d.cmds.map(c=>c.n).join(' + ')):h.total+' cards'}</h2>`;
  o+=`<div class="kpis"><div><b>${have} of ${need}</b><span class="m">non-basic cards you own</span></div><div><b class="${mcopies?'miss':'good'}">${mcopies?gb(cost):'Nothing to buy'}</b><span class="m">${mcopies?`to buy ${mcopies} missing card${mcopies==1?'':'s'}${noPrice?` (${noPrice} unpriced)`:''}`:'you own every card'}</span></div><div><b>${bad?bad+' to fix':warn?warn+' to look at':'Looks solid'}</b><span class="m">deck health</span></div></div>`;
- o+=`<h4>Deck health</h4><ul class="chk">${h.R.map(([l,t])=>`<li><span class="ic ${l}" aria-hidden="true">${ic[l]}</span><span class="sr">${l}: </span><span>${esc(t)}</span></li>`).join('')}</ul>`+bracketInfo(d)+`<div class="tools"><button data-twgo>Tweak deck to fix its health</button>${chkUndo?'<button class="alt" data-twundo>Undo last tweaks</button>':''}</div>`+(chkPlan?planHtml(chkPlan):'');
+ o+=`<h4>Deck health</h4><ul class="chk">${h.R.map(([l,t])=>`<li><span class="ic ${l}" aria-hidden="true">${ic[l]}</span><span class="sr">${l}: </span><span>${esc(t)}</span></li>`).join('')}</ul>`+bracketInfo(d)+(d.fmt=='commander'?powerHtml(powerLevel(d.ents,d.cmds,d.gc)):'')+`<div class="tools"><button data-twgo>Tweak deck to fix its health</button>${chkUndo?'<button class="alt" data-twundo>Undo last tweaks</button>':''}</div>`+(chkPlan?planHtml(chkPlan):'');
  const cur=Array(8).fill(0);d.ents.forEach(e=>{if(!isLandC(e.c))cur[Math.min(7,Math.floor(e.c.cmc))]+=e.n});const mx=Math.max(1,...cur);
  o+=`<h4>Mana curve</h4><div class="bars">${cur.map((n,i)=>`<div><i style="height:${n/mx*50}px"></i>${i==7?'7+':i}<br>${n}</div>`).join('')}</div>`;
  {const pp={W:0,U:0,B:0,R:0,G:0},sr={W:0,U:0,B:0,R:0,G:0,Colourless:0},nm=['W','U','B','R','G'];
