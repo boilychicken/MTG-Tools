@@ -1,0 +1,31 @@
+name: Record commander popularity
+
+on:
+  schedule:
+    - cron: '40 4 * * 1' # Mondays, 04:40 UTC
+  workflow_dispatch: # lets you run it by hand from the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:
+  group: record-commanders
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Read commander popularity
+        run: node scripts/record-commanders.mjs
+      - name: Save it to the repository
+        run: |
+          git config user.name "commander-recorder"
+          git config user.email "actions@users.noreply.github.com"
+          git pull --rebase
+          git add data
+          git diff --cached --quiet || git commit -m "Commander popularity $(date -u +%F)"
+          git push
