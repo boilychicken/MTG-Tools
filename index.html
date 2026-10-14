@@ -38,6 +38,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,.row:focus-visib
 label.row input{margin-right:6px}
 .info{background:transparent;color:var(--mut);border:1px solid var(--line);border-radius:50%;width:20px;height:20px;padding:0;margin-left:6px;font:italic 12px Georgia,serif;line-height:1}
 .info:hover{color:var(--gold);border-color:var(--gold)}
+.info.mv{font:700 14px/1 system-ui,sans-serif;width:22px;height:22px}.info.mv:focus-visible{outline:2px solid var(--gold)}
 #tip{position:fixed;z-index:10;width:250px;max-width:90vw;background:var(--panel);border:1px solid var(--gold);border-radius:10px;padding:10px;pointer-events:none;display:flex;flex-direction:column;gap:8px;font-size:13px;box-shadow:0 8px 24px #0009}
 #tip.pin{pointer-events:auto}
 #tip img{width:100%;border-radius:8px}
@@ -90,6 +91,7 @@ header{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px}header p{marg
 .fin{display:grid;gap:10px}
 .sl{display:grid;grid-template-columns:1fr 1fr;gap:6px 18px}
 @media(max-width:800px){.sl{grid-template-columns:1fr}}
+.skrow select,#sfmt{background:#0f1815;color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:6px}
 .fbar select{background:#0f1815;color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:6px}
 @media(min-width:801px){.side{position:sticky;top:12px;align-self:start;max-height:calc(100vh - 24px);overflow:auto}}
 .dk{display:flex;flex-wrap:wrap;gap:6px 12px;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}.dk .c{display:flex;flex-wrap:wrap;gap:6px}.dk button{padding:5px 10px;font-size:13px}
@@ -220,6 +222,7 @@ dialog{background:var(--panel);color:var(--tx);border:1px solid var(--line);bord
 <div class="panel"><h2>1. Choose cards to build around</h2>
 <select id="sfmt" aria-label="Format"><option value="">Any format</option><option value="s">Standard</option><option value="p">Pioneer</option><option value="m">Modern</option><option value="l">Legacy</option></select>
 <input type="search" id="sq" placeholder="Search your collection by name, type or text" aria-label="Search your collection" style="margin-top:6px">
+<div class="chips skrow" style="margin-top:6px"><select id="skw" aria-label="Add a keyword to search for"><option value="">Add a keyword…</option><optgroup label="Combat"><option value="flying">Flying</option><option value="first strike">First strike</option><option value="double strike">Double strike</option><option value="deathtouch">Deathtouch</option><option value="lifelink">Lifelink</option><option value="trample">Trample</option><option value="haste">Haste</option><option value="menace">Menace</option><option value="vigilance">Vigilance</option><option value="reach">Reach</option><option value="defender">Defender</option><option value="prowess">Prowess</option><option value="infect">Infect</option><option value="toxic">Toxic</option></optgroup><optgroup label="Protection"><option value="hexproof">Hexproof</option><option value="indestructible">Indestructible</option><option value="ward">Ward</option><option value="protection">Protection</option></optgroup><optgroup label="Timing and cost"><option value="flash">Flash</option><option value="flashback">Flashback</option><option value="cascade">Cascade</option><option value="convoke">Convoke</option><option value="kicker">Kicker</option><option value="cycling">Cycling</option><option value="evoke">Evoke</option><option value="madness">Madness</option><option value="unearth">Unearth</option></optgroup><optgroup label="Other"><option value="equip">Equip</option><option value="landfall">Landfall</option><option value="proliferate">Proliferate</option><option value="scry">Scry</option><option value="surveil">Surveil</option><option value="persist">Persist</option><option value="undying">Undying</option><option value="exploit">Exploit</option><option value="afterlife">Afterlife</option></optgroup></select><select id="skmode" aria-label="What counts as a match"><option value="has">Cards that have it</option><option value="any">Cards that give or mention it</option></select><select id="skall" aria-label="Match all or any of the chosen keywords" hidden><option value="all">All of these</option><option value="any">Any of these</option></select></div><div class="chips" id="skchips" role="group" aria-label="Chosen keywords"></div>
 <div class="fbar" id="fbarT"></div>
 <div class="m" id="smsg" role="status"></div>
 <div class="list" id="sres"></div></div>
@@ -1059,21 +1062,43 @@ let dpool=new Map(),dres=[],dout=null;
 const savePool=()=>idb.set('pool',[...dpool]);
 const tyOf=c=>{const t=c.t.split(' // ')[0].split('\u2014')[0];for(const k of['Land','Creature','Planeswalker','Artifact','Enchantment','Instant','Sorcery'])if(t.includes(k))return k;return'Other'};
 function addPool(c,n=1){const o=dpool.get(c.n);if(o)o.qty+=n;else dpool.set(c.n,{c:{...c,er:0},qty:n,lock:false});savePool();renderDraft()}
-function deckHtml(d,title,need,locked){
+// Cards left out of the deck, shown as a list you can swap from: + puts one back in, the − on a deck card moves it here.
+function leftOutHtml(d){
+ const side=d.side||[],g={};side.forEach(c=>{const t=tyOf(c);g[t]=g[t]||new Map();const o=g[t].get(c.n);g[t].set(c.n,{c,n:(o?o.n:0)+1})});
+ let h=`<h3 style="margin:0 0 4px;font-size:15px">Left out (${side.length})</h3>`;
+ if(!side.length)return h+'<p class="m">Nothing: every card in your pool is in the deck.</p>';
+ ['Creature','Planeswalker','Instant','Sorcery','Artifact','Enchantment','Other','Land'].forEach(k=>{if(!g[k])return;
+  h+=`<div class="m" style="margin-top:6px">${k=='Sorcery'?'Sorceries':k+'s'} (${[...g[k].values()].reduce((a,x)=>a+x.n,0)})</div>`+[...g[k].values()].sort((a,b)=>a.c.cmc-b.c.cmc||a.c.n.localeCompare(b.c.n)).map(x=>`<div class="row" data-n="${enc(x.c.n)}"><span>${x.n>1?x.n+'× ':''}${x.c.n}</span><span class="c">${x.c.mc}<button class="info mv" data-din="${enc(x.c.n)}" aria-label="Add ${esc(x.c.n)} to the deck" title="Add to the deck">+</button></span></div>`).join('')});
+ return h}
+// After a swap the basic lands are re-split so the deck stays at its size, and the colours follow the spells that are in.
+function dFix(d){
+ const total=d.total||40,all='WUBRG',BN='Plains Island Swamp Mountain Forest'.split(' '),S2=new Set([...(d.need||[]),...d.spells.flatMap(c=>c.ci)]);d.S=S2;
+ const pips={};[...S2].forEach(x=>pips[x]=2);d.spells.forEach(c=>(c.mc.match(/\{[WUBRG]\}/g)||[]).forEach(p=>{if(p[1] in pips)pips[p[1]]++}));
+ const nb=Math.max(0,total-d.spells.length-d.lands.length),cols=[...S2],tot=cols.reduce((a,x)=>a+pips[x],0),basics={};let left=nb;
+ if(!cols.length)basics.Wastes=nb;else{cols.forEach(x=>{const n=Math.floor(nb*pips[x]/tot);basics[BN[all.indexOf(x)]]=n;left-=n});
+  const o=[...cols].sort((a,b)=>pips[b]-pips[a]);let i=0;while(left>0){basics[BN[all.indexOf(o[i++%o.length])]]++;left--}}
+ d.basics=basics}
+function dMove(name,toDeck){const d=dout;if(!d)return;d.side=d.side||[];
+ if(toDeck){const i=d.side.findIndex(c=>c.n==name);if(i<0)return;const [c]=d.side.splice(i,1);(tyOf(c)=='Land'?d.lands:d.spells).push(c)}
+ else{let arr=d.spells,i=arr.findIndex(c=>c.n==name);if(i<0){arr=d.lands;i=arr.findIndex(c=>c.n==name)}if(i<0)return;const [c]=arr.splice(i,1);d.side.push(c)}
+ dFix(d);renderDraft()}
+function deckHtml(d,title,need,locked,edit){
  const g={};d.spells.forEach(c=>{const t=tyOf(c);g[t]=g[t]||new Map();const o=g[t].get(c.n);g[t].set(c.n,{c,n:(o?o.n:0)+1})});
  const nb=Object.values(d.basics).reduce((a,b)=>a+b,0),cur=Array(7).fill(0);d.spells.forEach(c=>cur[Math.min(6,Math.floor(c.cmc))]++);const mx=Math.max(1,...cur);
  const cre=d.spells.filter(c=>tyOf(c)=='Creature').length,avg=d.spells.length?(d.spells.reduce((a,c)=>a+c.cmc,0)/d.spells.length).toFixed(1):'-';
  const lm=new Map();d.lands.forEach(c=>lm.set(c.n,{c,n:(lm.get(c.n)?lm.get(c.n).n:0)+1}));
- let h=`<h2>${title}: ${[...d.S].join('')||'colourless'}</h2><div class="m">Creatures ${cre} \u00b7 Other spells ${d.spells.length-cre} \u00b7 Lands ${d.lands.length+nb} \u00b7 Avg mana value ${avg}${d.spells.length<need?` \u00b7 Only ${d.spells.length} of ${need} spells could be filled from this pool`:''}</div><div class="tools"><button class="alt" data-copy>Copy list</button><button class="alt" data-chk>Check this deck</button><button class="alt" data-save>Save deck</button><button class="alt" data-dl>Download .txt</button></div><div class="bars">${cur.map((n,i)=>`<div><i style="height:${n/mx*50}px"></i>${i==6?'6+':i}<br>${n}</div>`).join('')}</div><div class="cols"><div>`;
- ['Creature','Planeswalker','Instant','Sorcery','Artifact','Enchantment','Other'].forEach(k=>{if(!g[k])return;h+=`<h4>${k=='Sorcery'?'Sorceries':k+'s'} (${[...g[k].values()].reduce((a,x)=>a+x.n,0)})</h4>`+[...g[k].values()].sort((a,b)=>a.c.cmc-b.c.cmc||a.c.n.localeCompare(b.c.n)).map(x=>`<div class="row" data-n="${enc(x.c.n)}"><span>${x.n>1?x.n+'\u00d7 ':''}${x.c.n}${locked(x.c.n)?' \u2605':''}</span><span class="c">${x.c.mc}</span></div>`).join('')});
- h+=`</div><div><h4>Lands (${d.lands.length+nb})</h4>`+[...lm.values()].map(x=>`<div class="row" data-n="${enc(x.c.n)}"><span>${x.n>1?x.n+'\u00d7 ':''}${x.c.n}</span></div>`).join('')+Object.entries(d.basics).filter(([,n])=>n).map(([b,n])=>`<div class="row"><span>${n}\u00d7 ${b}</span></div>`).join('')+(d.side?`<h4>Sideboard (${d.side.length})</h4><p class="m">${d.side.map(c=>c.n).join(', ')||'None'}</p>`:'')+`</div></div>`;
+ let h=`<h2>${title}: ${[...d.S].join('')||'colourless'}</h2><div class="m">Creatures ${cre} \u00b7 Other spells ${d.spells.length-cre} \u00b7 Lands ${d.lands.length+nb} \u00b7 Avg mana value ${avg}${edit&&d.spells.length+d.lands.length+nb!=(d.total||40)?` \u00b7 ${d.spells.length+d.lands.length+nb} cards, the deck needs ${d.total||40}`:''}${edit?(d.spells.length!=need?` \u00b7 ${d.spells.length} spells (${need} is the usual)`:''):d.spells.length<need?` \u00b7 Only ${d.spells.length} of ${need} spells could be filled from this pool`:''}</div><div class="tools"><button class="alt" data-copy>Copy list</button><button class="alt" data-chk>Check this deck</button><button class="alt" data-save>Save deck</button><button class="alt" data-dl>Download .txt</button></div><div class="bars">${cur.map((n,i)=>`<div><i style="height:${n/mx*50}px"></i>${i==6?'6+':i}<br>${n}</div>`).join('')}</div><div class="cols"><div>${edit?'<h3 style="margin:0 0 4px;font-size:15px">In your deck</h3>':''}`;
+ ['Creature','Planeswalker','Instant','Sorcery','Artifact','Enchantment','Other'].forEach(k=>{if(!g[k])return;h+=`<h4>${k=='Sorcery'?'Sorceries':k+'s'} (${[...g[k].values()].reduce((a,x)=>a+x.n,0)})</h4>`+[...g[k].values()].sort((a,b)=>a.c.cmc-b.c.cmc||a.c.n.localeCompare(b.c.n)).map(x=>`<div class="row" data-n="${enc(x.c.n)}"><span>${x.n>1?x.n+'\u00d7 ':''}${x.c.n}${locked(x.c.n)?' \u2605':''}</span><span class="c">${x.c.mc}${edit?`<button class="info mv" data-dcut="${enc(x.c.n)}" aria-label="Move ${esc(x.c.n)} out of the deck" title="Move out of the deck">\u2212</button>`:''}</span></div>`).join('')});
+ const landH=`<h4>Lands (${d.lands.length+nb})</h4>`+[...lm.values()].map(x=>`<div class="row" data-n="${enc(x.c.n)}"><span>${x.n>1?x.n+'× ':''}${x.c.n}</span>${edit?`<span class="c"><button class="info mv" data-dcut="${enc(x.c.n)}" aria-label="Move ${esc(x.c.n)} out of the deck" title="Move out of the deck">−</button></span>`:''}</div>`).join('')+Object.entries(d.basics).filter(([,n])=>n).map(([b,n])=>`<div class="row"><span>${n}× ${b}</span></div>`).join('');
+ // editable: the deck (spells and lands) on the left, everything left out on the right, so a swap is one click on each side
+ h+=edit?landH+`</div><div>`+leftOutHtml(d)+`</div></div>`:`</div><div>`+landH+(d.side?`<h4>Sideboard (${d.side.length})</h4><p class="m">${d.side.map(c=>c.n).join(', ')||'None'}</p>`:'')+`</div></div>`;
  return h}
 function renderDraft(){
  $('#dres').innerHTML=dres.map(c=>`<div class="row" tabindex="0" data-dadd="${enc(c.n)}" data-n="${enc(c.n)}" title="Click to add to your pool"><span>${c.n}<br><span class="m">${c.t.split(' // ')[0]}${c.r?' \u00b7 '+c.r:''}</span></span><span class="c">${c.mc}<button class="info" data-info="${enc(c.n)}" aria-label="Show details for ${c.n}">i</button></span></div>`).join('');
  const ps=[...dpool.values()].sort((a,b)=>a.c.cmc-b.c.cmc||a.c.n.localeCompare(b.c.n));
  $('#dcnt').textContent=`(${ps.reduce((a,o)=>a+o.qty,0)} cards, ${ps.filter(o=>o.lock).length} must-play)`;
  $('#dpool').innerHTML=ps.map(o=>`<div class="row" tabindex="0" data-n="${enc(o.c.n)}"><span>${o.c.n}${o.qty>1?` <span class="m">\u00d7${o.qty}</span>`:''}<br><span class="m">${o.c.t.split(' // ')[0]}</span></span><span class="c">${o.c.mc}<button class="info star" data-lock="${enc(o.c.n)}" aria-pressed="${o.lock}" aria-label="Must play ${o.c.n}" title="Must play">\u2605</button><button class="info" data-rmp="${enc(o.c.n)}" aria-label="Remove ${o.c.n}" title="Remove one copy">\u2715</button></span></div>`).join('')||'<p class="m">No cards yet. Choose a set and click cards to add them, or paste a list.</p>';
- const el=$('#dout');el.hidden=!dout;if(dout)el.innerHTML=deckHtml(dout,'Your 40-card deck',23,n=>(dpool.get(n)||{}).lock)}
+ const el=$('#dout');el.hidden=!dout;if(dout)el.innerHTML=deckHtml(dout,'Your 40-card deck',23,n=>(dpool.get(n)||{}).lock,true)}
 const dText=d=>{const m=new Map();[...d.spells,...d.lands].forEach(c=>m.set(c.n,(m.get(c.n)||0)+1));return[...[...m].map(([n,k])=>k+' '+n),...Object.entries(d.basics).filter(([,n])=>n).map(([b,n])=>n+' '+b)].join('\n')};
 const limVal=c=>{const o=c.o.toLowerCase(),t=c.t.split(' // ')[0];
  let v={mythic:3.5,rare:3,uncommon:1.8,common:1,special:2,bonus:2}[c.r]??1;
@@ -1109,7 +1134,7 @@ function buildCore(ents,cfg){
   const nb=Math.max(0,nl-lands.length),cols=[...S2],tot=cols.reduce((a,x)=>a+pips[x],0),basics={};let left=nb;
   if(!cols.length)basics.Wastes=nb;else{cols.forEach(x=>{const n=Math.floor(nb*pips[x]/tot);basics[BN[all.indexOf(x)]]=n;left-=n});
    const o=[...cols].sort((a,b)=>pips[b]-pips[a]);let i=0;while(left>0){basics[BN[all.indexOf(o[i++%o.length])]]++;left--}}
-  return{S:S2,spells,lands,basics,side:cfg.noSide?null:ents.filter(e=>!pick.includes(e)&&!lents.includes(e)).map(e=>e.c)};
+  return{S:S2,need:[...need],total:cfg.total,spells,lands,basics,side:cfg.noSide?null:ents.filter(e=>!pick.includes(e)&&!lents.includes(e)).map(e=>e.c)};
  }finally{({cmd,profiles,tribes,kws,typeFocus}=save);sc.clear()}}
 async function buildDraft(){
  await loadTypes();const ents=[];dpool.forEach(o=>{for(let k=0;k<o.qty;k++)ents.push({c:o.c,lock:o.lock,k})});
@@ -1146,9 +1171,29 @@ let ba=new Map(),sres=[],sout=null,sCols=new Set();
 function renderSCols(){$('#scols').innerHTML=COLS.filter(([k])=>k!='C').map(([k,n])=>`<button class="chip c${k}" data-scol="${k}" aria-pressed="${sCols.has(k)}" aria-label="${n}" title="${n}">${k}</button>`).join('')}
 $('#scols').addEventListener('click',e=>{const k=e.target.dataset&&e.target.dataset.scol;if(!k)return;sCols.has(k)?sCols.delete(k):sCols.add(k);renderSCols()});renderSCols();
 const sMax=c=>Math.min(4,qty.get(c.n)||1);
-function ssearch(){const terms=parseQ($('#sq').value),f=$('#sfmt').value,on=active(terms)||!!f;
- const r=on?lib.filter(c=>(!f||(c.fm||'').includes(f))&&!/Basic/.test(c.t)&&passes(c)&&matches(c,terms)).sort(sorter(flt.sortT)):[];sres=r.slice(0,100);
- $('#smsg').textContent=on?`${r.length} card${r.length==1?'':'s'} in your collection${r.length>100?', showing 100. Narrow your search to see the rest.':''}`:'Type or use the filters to search your collection.';renderSixty()}
+// Keyword search for the 60-card builder. 'kw' = a plain keyword on its own line item (Flying, haste), 'param' = keyword with a cost or value (Ward {2}, Kicker {1}),
+// 'ab' = an ability word line (Landfall \u2014 ...), null = an action or effect that can only be "mentioned" (Scry, Proliferate).
+const SKW={flying:['flying','kw'],'first strike':['first strike','kw'],'double strike':['double strike','kw'],deathtouch:['deathtouch','kw'],lifelink:['lifelink','kw'],trample:['trample','kw'],haste:['haste','kw'],menace:['menace','kw'],vigilance:['vigilance','kw'],reach:['reach','kw'],defender:['defender','kw'],prowess:['prowess','kw'],infect:['infect','kw'],toxic:['toxic','param'],
+ hexproof:['hexproof','kw'],indestructible:['indestructible','kw'],ward:['ward','param'],protection:['protection from','param'],flash:['flash','kw'],flashback:['flashback','param'],cascade:['cascade','kw'],convoke:['convoke','kw'],kicker:['kicker','param'],cycling:['cycling','param'],evoke:['evoke','param'],madness:['madness','param'],unearth:['unearth','param'],
+ equip:['equip','param'],landfall:['landfall','ab'],proliferate:['proliferate',null],scry:['scry',null],surveil:['surveil',null],persist:['persist','kw'],undying:['undying','kw'],exploit:['exploit','kw'],afterlife:['afterlife','param']};
+const skwSet=new Set(),skLabel=k=>k.replace(/^./,x=>x.toUpperCase());
+function skwOk(c){if(!skwSet.size)return true;
+ const text=(c.o||'').toLowerCase().replace(/\([^)]*\)/g,''),lines=text.split('\n').map(l=>l.trim()),mode=$('#skmode').value,all=$('#skall').value=='all';
+ const one=k=>{const [w,t]=SKW[k];
+  if(mode=='has'&&t){
+   if(t=='ab')return lines.some(l=>new RegExp('^'+w+'\\s*[\\u2014-]').test(l));
+   return lines.some(l=>l.split(/\s*[,;]\s*/).some(i=>t=='kw'?i==w:(i==w||i.startsWith(w+' ')||i.startsWith(w+'\u2014'))))}
+  return new RegExp('\\b'+w.replace(/ /g,'[ -]')+'\\b').test(text)};
+ const ks=[...skwSet];return all?ks.every(one):ks.some(one)}
+function renderSkw(){
+ $('#skchips').innerHTML=[...skwSet].map(k=>`<button class="chip wide" data-skrm="${k}" aria-pressed="true" aria-label="Remove ${skLabel(k)}" title="Click to remove">${skLabel(k)} \u2715</button>`).join('');
+ $('#skall').hidden=skwSet.size<2}
+$('#skw').onchange=e=>{const v=e.target.value;if(v&&SKW[v])skwSet.add(v);e.target.value='';renderSkw();ssearch()};
+$('#skchips').onclick=e=>{const k=e.target.dataset&&e.target.dataset.skrm;if(!k)return;skwSet.delete(k);renderSkw();ssearch()};
+$('#skmode').onchange=$('#skall').onchange=ssearch;
+function ssearch(){const terms=parseQ($('#sq').value),f=$('#sfmt').value,on=active(terms)||!!f||skwSet.size>0;
+ const r=on?lib.filter(c=>(!f||(c.fm||'').includes(f))&&!/Basic/.test(c.t)&&passes(c)&&matches(c,terms)&&skwOk(c)).sort(sorter(flt.sortT)):[];sres=r.slice(0,100);
+ $('#smsg').textContent=on?`${r.length} card${r.length==1?'':'s'} in your collection${skwSet.size?' with '+[...skwSet].map(skLabel).join(skwSet.size>1&&$('#skall').value=='all'?' + ':' or '):''}${r.length>100?', showing 100. Narrow your search to see the rest.':''}`:'Type or use the filters to search your collection.';renderSixty()}
 function renderSixty(){
  $('#sres').innerHTML=sres.map(c=>`<div class="row" tabindex="0" data-sadd="${enc(c.n)}" data-n="${enc(c.n)}" title="Click to build around this card"><span>${c.n} <span class="m">\u00d7${qty.get(c.n)||1} owned</span><br><span class="m">${c.t.split(' // ')[0]}</span></span><span class="c">${c.mc}<button class="info" data-info="${enc(c.n)}" aria-label="Show details for ${c.n}">i</button></span></div>`).join('');
  $('#scnt').textContent=`(${[...ba.values()].reduce((a,o)=>a+o.n,0)} copies)`;
@@ -1176,9 +1221,11 @@ async function dimport(){const m=new Map();$('#dpaste').value.split(/\r?\n/).for
    b.forEach(n=>{const s=by[n.toLowerCase()]||by[n.split(' // ')[0].toLowerCase()];if(s)addPool(s,m.get(n));else miss.push(n)});await sleep(120)}
   $('#dmsg').textContent=`Added ${names.length-miss.length} cards.`+(miss.length?` Not found: ${miss.slice(0,5).join(', ')}`:'');$('#dpaste').value=''
  }catch(e){$('#dmsg').textContent='Could not reach Scryfall. Check your connection.'}}
-$('#tool-draft').addEventListener('click',e=>{if(e.target.closest('[data-info]'))return;const t=e.target.closest('[data-dadd],[data-lock],[data-rmp]');
+$('#tool-draft').addEventListener('click',e=>{if(e.target.closest('[data-info]'))return;const t=e.target.closest('[data-dadd],[data-lock],[data-rmp],[data-dcut],[data-din]');
  if(t){const d=t.dataset;
-  if(d.dadd)addPool(dres.find(c=>c.n==decodeURIComponent(d.dadd)));
+  if(d.dcut!==undefined)dMove(decodeURIComponent(d.dcut),false);
+  else if(d.din!==undefined)dMove(decodeURIComponent(d.din),true);
+  else if(d.dadd)addPool(dres.find(c=>c.n==decodeURIComponent(d.dadd)));
   else if(d.lock){const o=dpool.get(decodeURIComponent(d.lock));o.lock=!o.lock;savePool();renderDraft()}
   else{const n=decodeURIComponent(d.rmp),o=dpool.get(n);if(--o.qty<1)dpool.delete(n);savePool();renderDraft()}}
  else if(e.target.dataset.copy!==undefined){navigator.clipboard.writeText(dText(dout)).then(()=>e.target.textContent='Copied',()=>e.target.textContent='Copy failed')}
